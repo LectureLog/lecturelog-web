@@ -10,8 +10,10 @@ TAILWIND_VERSION := 4.1.10
 TAILWIND_BIN := ./bin/tailwindcss
 
 # Генерация templ-компонентов (через tool-директиву go.mod).
+# Запускаем из каталога пакета, чтобы FileName в *_templ.go был коротким ("layout.templ"),
+# совпадая с выводом go generate ./... → однозначный детерминированный артефакт.
 templ:
-	go tool templ generate
+	cd internal/web && go tool templ generate
 
 # Скачивание Tailwind standalone CLI в ./bin/ (gitignored).
 # Бинарь нужен только при пересборке CSS; сам app.css коммитится.
