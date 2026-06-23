@@ -162,6 +162,54 @@ func Load(getenv func(string) string) (*Config, error)
 | `PRESIGNED_TTL` | TTL presigned-пачки | нет | `24h` |
 | `SESSION_TTL` | TTL сессии | нет | `720h` |
 
+## Пакет `internal/web`
+
+Каркас SSR-презентации «Читальный зал» — общий слой рендеринга и роутинга для
+всех будущих страниц платформы. Доменные страницы (читалка, хаб, загрузка) — C1.
+
+**Стек.** Роутер — [chi](https://github.com/go-chi/chi); HTML-компоненты —
+[templ](https://templ.guide) (Go-шаблоны с типизацией, генерация `*_templ.go`);
+интерактивность — [htmx](https://htmx.org) v1.9.12; стили — Tailwind CSS v4
+(CSS-first, standalone CLI без node).
+
+**Toolchain.**
+
+- **templ** прописан как tool-директива `go.mod` (как oapi-codegen): никаких
+  `tools.go`, никакого глобального бинаря. Генерация — `go generate ./...`
+  (директива в `internal/web/generate.go`). Сгенерированные `*_templ.go`
+  коммитятся в репозиторий.
+- **Tailwind** — standalone CLI-бинарь (без Node.js), скачивается целью
+  `make tailwind-bin` в `./bin/` (gitignored). Собранный
+  `internal/web/static/css/app.css` коммитится в репозиторий — `go test`
+  не требует наличия Tailwind-бинаря.
+- **htmx** вендорён: `internal/web/static/vendor/htmx.min.js`, отдаётся
+  через `//go:embed` (не CDN).
+
+**Layout «Читальный зал».** templ-компонент `Layout(data, actions)`:
+
+- `<html data-theme>` — атрибут определяет тему (дефолт `light` в разметке,
+  не завязан на JS).
+- Sticky-шапка 58px: brand-mark, название, слот `actions`, тумблер темы.
+- `<head>`: Google Fonts (Source Serif 4 + Onest), `/static/css/app.css`, htmx.
+- Инлайн-скрипт (до first paint) читает `localStorage` и проставляет
+  `data-theme` на `<html>` — анти-FOUC без вспышки дефолтной темы.
+
+**Дизайн-токены.** Источник — `design/tokens.css` (пакет `design/`, style-guide
+платформы). Токены скопированы в `internal/web/assets/tokens.css` и подключены
+к Tailwind через директиву `@theme` (`var(--token)`); тёмная тема —
+переопределение переменных под `[data-theme="dark"]`.
+
+**Роутер.** `web.NewRouter()` (chi) монтирует:
+
+- `/static/*` — embed-статика (CSS, htmx, vendor-файлы);
+- `/` — демо-страница (проверка layout).
+
+`cmd/server` пока не создан — точка входа появится в C0-auth.
+
+**Тесты.** Рендер `Layout` в `bytes.Buffer` + `httptest`-проверка роутера.
+Ни браузера, ни Node.js, ни Tailwind-бинаря не требуется — артефакты
+(`*_templ.go`, `app.css`) коммитятся.
+
 ## Генерация клиента
 
 ```bash
@@ -197,14 +245,17 @@ make sync-spec   # cp ../lecturelog-core/docs/openapi.json -> internal/coreclien
 | Цель | Действие |
 |---|---|
 | `make generate` | нормализация спеки + oapi-codegen |
+| `make web-gen` | `go generate ./...` для пакета `internal/web` (templ) |
+| `make tailwind-bin` | скачать Tailwind standalone CLI в `./bin/` |
 | `make build` | `generate` → `go build ./...` |
 | `make vet` | `go vet ./...` |
 | `make test` | `go test ./...` (юнит + контрактный smoke к замоканному ядру) |
-| `make gate` | ворота GATE B: `generate` + build + vet + test |
+| `make gate` | полные ворота: templ-генерация + Tailwind-сборка + build + vet + test |
+| `make gen-check` | проверка детерминизма генерации (`git diff --exit-code`) |
 | `make sync-spec` | обновить вендоренную спеку из репозитория ядра |
 | `make migrate-test` | интеграционная проверка миграций (требует Docker) |
 
-Ворота GATE B (слой 1 приёмки платформы):
+**Ворота GATE B** (слой 1 приёмки платформы, coreclient/config/db):
 
 ```bash
 go generate ./... && go build ./... && go vet ./... && go test ./...
@@ -215,9 +266,15 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
 пути, методы, Content-Type, сериализацию тел и маппинг кодов (200/204/400/404/409)
 в доменные ошибки — герметично, без сети и соседнего репозитория.
 
-Дефолтные ворота (`make gate`) не требуют ни Docker, ни Postgres — все
-интеграционные тесты изолированы тегом `integration` и запускаются только через
-`make migrate-test`.
+**Ворота C0-web** (`make gate`): templ-генерация + сборка Tailwind + `go build/vet/test`.
+`go test` проходит без Node.js, Tailwind-бинаря и браузера — все артефакты
+(`*_templ.go`, `app.css`) коммитятся в репозиторий.
+
+`make gen-check` — CI-цель, проверяет детерминизм генерации: запускает `go generate`
+и падает, если `git diff --exit-code` обнаруживает изменения.
+
+Дефолтные ворота не требуют ни Docker, ни Postgres — все интеграционные тесты
+изолированы тегом `integration` и запускаются только через `make migrate-test`.
 
 ## Статус
 
@@ -228,7 +285,10 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
 - **C0-db** — `internal/db`: схема и миграции Postgres платформы (tern + embed),
   таблицы users/identities/sessions/lectures, GATE B зелёный, интеграционный тест
   за `integration`-тегом.
+- **C0-web** — `internal/web`: каркас «Читальный зал» завершён. chi-роутер,
+  templ-layout, htmx, Tailwind v4, дизайн-токены из `design/`, анти-FOUC,
+  тумблер темы, web.NewRouter со статикой и демо-страницей, `make gate` зелёный.
 
-Впереди — C0-web (каркас «Читальный зал»), C0-auth и волна C1 (доменные модули:
+Впереди — C0-auth (последний атом волны C0) и волна C1 (доменные модули:
 upload, lecture, hub, reader, sync). Подробности — в `docs/WORKFLOW.md`
 и `docs/TASKS.md`.
