@@ -10,16 +10,16 @@ import (
 // Опциональные ключи (TTL, UseSSL) не включены — проверяем дефолты.
 func fullEnv() map[string]string {
 	return map[string]string{
-		"GOOGLE_CLIENT_ID":           "gid-test",
-		"GOOGLE_CLIENT_SECRET":       "gsecret-test",
-		"PLATFORM_CALLBACK_URL":      "http://localhost:8080/auth/callback",
-		"LECTURELOG_WEBHOOK_SECRET":  "super-secret-hmac-key",
-		"PLATFORM_DB_DSN":            "postgres://user:pass@localhost/db",
-		"CORE_API_BASE_URL":          "http://core:8000",
-		"CORE_MINIO_ENDPOINT":        "minio:9000",
-		"CORE_MINIO_ACCESS_KEY":      "minio-access",
-		"CORE_MINIO_SECRET_KEY":      "minio-secret",
-		"CORE_MINIO_BUCKET":          "lectures",
+		"GOOGLE_CLIENT_ID":          "gid-test",
+		"GOOGLE_CLIENT_SECRET":      "gsecret-test",
+		"PLATFORM_CALLBACK_URL":     "http://localhost:8080/auth/callback",
+		"LECTURELOG_WEBHOOK_SECRET": "super-secret-hmac-key",
+		"PLATFORM_DB_DSN":           "postgres://user:pass@localhost/db",
+		"CORE_API_BASE_URL":         "http://core:8000",
+		"CORE_MINIO_ENDPOINT":       "minio:9000",
+		"CORE_MINIO_ACCESS_KEY":     "minio-access",
+		"CORE_MINIO_SECRET_KEY":     "minio-secret",
+		"CORE_MINIO_BUCKET":         "lectures",
 	}
 }
 
