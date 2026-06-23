@@ -72,6 +72,54 @@ OpenAPI-контракта ядра.
 > HTTP-приём вебхука (endpoint, чтение тела, матч лекции по `core_task_id`) — вне
 > B1; это задача C1-sync. B1 даёт только чистый верификатор и тип тела.
 
+## Пакет `internal/config`
+
+Единая точка чтения и валидации конфигурации приложения из окружения. Пакет
+используется при старте сервера; ни один компонент платформы не обращается к
+`os.Getenv` напрямую.
+
+Сигнатура точки входа:
+
+```go
+func Load(getenv func(string) string) (*Config, error)
+```
+
+Геттер окружения инъектируется, а не захватывается из `os` — это делает функцию
+детерминированной и тривиально тестируемой без манипуляций с реальным окружением
+процесса. Новых зависимостей пакет не вносит (stdlib-only).
+
+**Fail-fast с агрегацией.** При отсутствии любого обязательного ключа `Load`
+возвращает **одну** ошибку со списком **всех** недостающих ключей — не падает на
+первом. Заданное, но непарсируемое значение опционального ключа тоже является
+ошибкой (не молчаливый дефолт).
+
+**Валидация `LECTURELOG_WEBHOOK_SECRET`** вынесена сюда (закрытие долга B1):
+пустой или незаданный секрет — обязательная ошибка при загрузке конфигурации.
+Прежде эта проверка отсутствовала, что позволяло принять поддельную подпись при
+пустом секрете.
+
+**Фабрика `(*Config).CoreClient()`** возвращает готовую `coreclient.Config` без
+дублирования полей. `CORE_API_BASE_URL` передаётся без суффикса `/api/v1` —
+пути, сгенерированные `oapi-codegen`, уже несут этот префикс.
+
+### Таблица env-ключей
+
+| Ключ | Назначение | Обяз. | Дефолт |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | Google OAuth client id | да | — |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | да | — |
+| `PLATFORM_CALLBACK_URL` | OAuth callback URL | да | — |
+| `LECTURELOG_WEBHOOK_SECRET` | HMAC-секрет вебхука (общий с ядром) | да | — |
+| `PLATFORM_DB_DSN` | DSN Postgres платформы (pgx) | да | — |
+| `CORE_API_BASE_URL` | Базовый URL ядра (без `/api/v1`) | да | — |
+| `CORE_MINIO_ENDPOINT` | MinIO ядра endpoint | да | — |
+| `CORE_MINIO_ACCESS_KEY` | MinIO ядра access key | да | — |
+| `CORE_MINIO_SECRET_KEY` | MinIO ядра secret key | да | — |
+| `CORE_MINIO_BUCKET` | MinIO ядра bucket | да | — |
+| `CORE_MINIO_USE_SSL` | MinIO use SSL | нет | `false` |
+| `PRESIGNED_TTL` | TTL presigned-пачки | нет | `24h` |
+| `SESSION_TTL` | TTL сессии | нет | `720h` |
+
 ## Генерация клиента
 
 ```bash
@@ -126,7 +174,11 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
 
 ## Статус
 
-Волна B (мост к ядру) завершена: пакет `internal/coreclient` готов, GATE B
-зелёный. Впереди — волна C0 (фундамент платформы: db, config, web-каркас, auth)
-и волна C1 (доменные модули: upload, lecture, hub, reader, sync). Подробности —
-в `docs/WORKFLOW.md` и `docs/TASKS.md`.
+- **B1** — `internal/coreclient`: типизированный клиент ядра, HMAC-верификатор
+  вебхука, GATE B зелёный.
+- **C0-config** — `internal/config`: единый конфиг-слой, fail-fast агрегация
+  ошибок окружения, валидация `LECTURELOG_WEBHOOK_SECRET` (долг B1 закрыт).
+
+Впереди — оставшиеся атомы C0 (db, web-каркас, auth) и волна C1 (доменные
+модули: upload, lecture, hub, reader, sync). Подробности — в `docs/WORKFLOW.md`
+и `docs/TASKS.md`.
