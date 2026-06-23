@@ -50,7 +50,7 @@ GATE C0: миграции применяются; layout рендерится в
 |---|---|---|---|---|---|---|---|---|
 | C0-config | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (gofmt) | ✅ в integration (bb819d3) | ✅ |
 | C0-db     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (go mod tidy) | ✅ в integration (00025c7) | ✅ |
-| C0-web    | — | — | — | — | — | — | — | — |
+| C0-web    | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 круга (детерминизм templ; чистка config+focus) | ✅ в integration (08cdb4c) | ✅ |
 | C0-auth   | — | — | — | — | — | — | — | — |
 
 ## ИЗМЕНЕНИЕ MERGE-ПОЛИТИКИ (решение владельца 2026-06-23)
@@ -108,12 +108,47 @@ Downloads/«Сбор нового проекта»):
 - Соответствие экранов: Конспект→C1-reader(§6), Хаб→C1-hub(§8), Загрузка→C1-upload(§5).
   Для C0-web базовый каркас (шапка+layout+тема) — смотреть «Общее.dc.html» и STYLE_GUIDE §4.
 
-## СЛЕДУЮЩИЙ ШАГ (после сброса лимитов): C0-web
-- Каркас «Читальный зал»: templ + Tailwind, токены `design/tokens.css` → Tailwind-тема,
-  общий layout (sticky-шапка 58px, светлая/тёмная тема через data-theme), htmx-хелперы,
-  статика, шрифты. По `design/STYLE_GUIDE.md` (§4 сетка, §5 компоненты, §8 тех-правила).
-  C0-web = ТОЛЬКО фундамент презентации (layout+токены+тема+статика), НЕ доменные страницы
-  (читалка/хаб/загрузка — это C1, со своими прототипами).
+### C0-web — итог атома (смержен в integration 08cdb4c)
+- `internal/web`: chi+templ+htmx+Tailwind v4 (CSS-first). templ — tool-директива go.mod
+  (`go generate ./...`, `*_templ.go` коммитятся). Tailwind — standalone CLI без node
+  (Makefile `tailwind-bin` → ./bin/ gitignored; `app.css` коммитится). htmx вендорён
+  (static/vendor/htmx.min.js v1.9.12, go:embed). Layout «Читальный зал»: sticky-шапка
+  58px, тема data-theme (дефолт light в разметке, анти-FOUC инлайн-скрипт, тумблер),
+  токены design/tokens.css → internal/web/assets/tokens.css → Tailwind @theme. web.NewRouter
+  (chi): /static/* (embed) + / (демо). cmd/server НЕ создан (граница — C0-auth/интеграция).
+- Ворота web: `make gate` (templ+tailwind+build/vet/test), `make gen-check` (детерминизм,
+  git diff --exit-code), `make web-gen`. go test проходит БЕЗ node/Tailwind/интернета (артефакты в репо).
+- ACCEPT COMPLETE, REVIEW APPROVE. 2 LOOP-круга: (1) детерминизм генерации templ — было
+  два несогласованных способа (из корня vs из пакета) → грязное дерево после gate; канон =
+  генерация из каталога пакета, `make templ` приведён к нему (e4befd5). (2) чистка: удалён
+  мёртвый tailwind.config.js (v4 CSS-first → `@source` в tailwind.css), focus-стили a11y (7013617).
+- Коммиты пофазные с реальным diff.
+
+## ДОЛГИ для C1 (из REVIEW C0-web — не блокеры, зафиксировать)
+1. **FileServer отдаёт листинг каталогов** (/static/css/, /static/vendor/). Для прод-беты
+   обернуть FileSystem, возвращающий 404 на директории. → C0-auth/интеграция.
+2. **tabular-nums** (§8) — применить на числовых элементах (время/проценты/даты) в C1
+   (reader/lecture). В C0 числовых нет.
+3. **max-width**: базовый layout = 1240px (из прототипа Общее.dc.html — корректно для
+   каркаса приложения). Читалка C1-reader использует 1180px (из Конспект.dc.html — свой
+   прототип). НЕ дефект, просто разные прототипы для разных экранов.
+4. **Tailwind purge**: добавлен `@source "../"` — при C1 (utility-классы в .templ) проверить,
+   что нужные классы не вырезаются и попадают в app.css.
+
+## СЛЕДУЮЩИЙ ШАГ: C0-auth (ПОСЛЕДНИЙ атом C0, блокер защищённых роутов)
+Зависит от db (users/identities/sessions) + config (OAuth-секреты, PLATFORM_CALLBACK_URL) +
+web (layout для страниц входа/ошибок, hx-headers-хук под CSRF уже заложен в layout).
+- Google OAuth-флоу (state БЕЗУСЛОВНО, §4). Сессии в Postgres (кука httponly/secure/SameSite=Lax).
+- Логика входа по email (§3: матч users.email только при email_verified=true; разный email = новый юзер).
+- CSRF synchronizer-токен на мутирующих формах (templ кладёт, htmx шлёт заголовком — место
+  hx-headers в layout готово; middleware сверяет). Готовый middleware (gorilla/csrf или nosurf).
+- Middleware прав: аноним на public-роуты, сессия на остальном (§4 матрица).
+- Вероятно появится cmd/server (точка входа: config.Load → db.New/Migrate → web.NewRouter +
+  auth-роуты+middleware) — здесь граница C0-web «cmd позже» закрывается. Уточнить в плане:
+  заводить полноценный cmd/server или минимальный bootstrap.
+- GATE C0 (полный): миграции применяются; layout в обеих темах; вход через Google работает;
+  middleware пускает аноним на public и режет приватное; CSRF/state срабатывают.
+- ПОСЛЕ C0-auth → КОНЕЦ ВОЛНЫ C0: push integration на origin + PR (политика владельца).
 - Независим от config/db (чистая презентация). Worktree node/C0-web от integration.
 - Ворота C0-web: + `templ generate` и сборка Tailwind ПЕРЕД go build. Учесть в плане
   toolchain (templ как tool-директива go.mod? как Makefile-цель?).
