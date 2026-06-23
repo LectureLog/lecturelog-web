@@ -1,7 +1,7 @@
 # Makefile платформы LectureLog (web).
 # Цели обёрнуты вокруг стандартного go-тулчейна и генерации coreclient из спеки ядра.
 
-.PHONY: generate build vet test gate sync-spec
+.PHONY: generate build vet test gate sync-spec migrate-test
 
 # Генерация coreclient: нормализация спеки (3.1.0 -> 3.0-nullable) + oapi-codegen.
 # Сам процесс описан в //go:generate директивах internal/coreclient/generate.go.
@@ -23,6 +23,11 @@ test:
 # GATE B / слой 1 приёмки платформы: генерация + сборка + vet + тесты.
 gate: generate
 	go build ./... && go vet ./... && go test ./...
+
+# GATE C0: интеграционная проверка применения DDL-миграций против реального Postgres
+# (поднимается через testcontainers; требует запущенного Docker).
+migrate-test:
+	go test -tags=integration ./internal/db/...
 
 # Обновить вендоренную копию спеки ядра из соседнего репозитория core.
 # ВАЖНО: после sync-spec обязательно `make generate` и ревью diff в internal/coreclient/gen.go,
