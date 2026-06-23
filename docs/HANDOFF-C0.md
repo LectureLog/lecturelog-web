@@ -46,15 +46,17 @@ GATE C0: миграции применяются; layout рендерится в
 работает; middleware пускает аноним на public и режет приватное; CSRF/state срабатывают.
 
 ## State-машина волны
-| Задача | PLAN | ISOLATE | BUILD | ACCEPT | REVIEW | LOOP | MERGE(PR) | DOCS |
+| Задача | PLAN | ISOLATE | BUILD | ACCEPT | REVIEW | LOOP | MERGE | DOCS |
 |---|---|---|---|---|---|---|---|---|
-| C0-config | ✅ | ✅ node/C0-config | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (gofmt) | ⏳ PR, стоп | ✅ |
-| C0-db     | — | — | — | — | — | — | — | — |
+| C0-config | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (gofmt) | ✅ в integration (bb819d3) | ✅ |
+| C0-db     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (go mod tidy) | ✅ в integration (00025c7) | ✅ |
 | C0-web    | — | — | — | — | — | — | — | — |
 | C0-auth   | — | — | — | — | — | — | — | — |
 
-MERGE: НЕ авто-мерж. На каждом готовом атоме — PR (node/<задача> → integration)
-через gh с функциональным описанием, СТОП, зову человека принять.
+## ИЗМЕНЕНИЕ MERGE-ПОЛИТИКИ (решение владельца 2026-06-23)
+Атомы C0 **мержатся в локальную integration сразу** (--no-ff, без PR на каждый).
+В КОНЦЕ волны C0: push ветки integration на origin + ОДИН PR integration→... (или
+по договорённости). НЕ создавать PR на каждый атом. Worktree атома убирается после мержа.
 
 ### C0-config — итог атома (готов к PR)
 - Ветка `node/C0-config` от integration. Пакет `internal/config`:
@@ -69,9 +71,34 @@ MERGE: НЕ авто-мерж. На каждом готовом атоме — P
 - Наблюдение (не блокер): коммиты фаз 3–6 пустые (--allow-empty) — TDD-гранулярность
   нарушена, реализация в одном коммите фазы 2; функционально полно, тесты red→green
   существуют и проходят. Учесть для следующих исполнителей: коммитить пофазно реально.
-- СЛЕДУЮЩИЙ ШАГ: push node/C0-config на origin + PR → integration, СТОП, человек
-  принимает PR. После приёма — синхронизировать локальную integration, убрать
-  worktree, начать C0-db (зависит от config: DSN из PLATFORM_DB_DSN).
+### C0-db — итог атома (смержен в integration)
+- `internal/db`: миграции tern/v2 (embed), `db.New(ctx,dsn) *pgxpool.Pool` (ping),
+  `db.Migrate(ctx,pool)`. Таблицы users/identities/sessions/lectures строго §3,
+  нативные enum, gen_random_uuid, частичный idx_lectures_core_task_id (§7).
+  db НЕ импортирует config (DSN строкой). Решение оркестратора: индексы hub/owner
+  отданы в C1 (только core_task_id здесь).
+- ACCEPT COMPLETE (дефолтные ворота без Postgres зелёные; интеграционный тест за
+  тегом `integration` РЕАЛЬНО прошёл через testcontainers — Docker есть в окружении).
+  REVIEW APPROVE. Замечание ревью (go mod tidy: прямые зависимости были // indirect)
+  закрыто коммитом 189e6a7. DOCS: README обновлён (e3a41ab).
+- Коммиты пофазные с реальным diff (долг C0-config по гранулярности исправлен).
+- GATE-команда миграций: `make migrate-test` (== `go test -tags=integration ./internal/db/...`), требует Docker.
+
+## ПАУЗА (2026-06-23, ~22:40): остановка по лимитам
+5h-окно тарифа на 86% (сброс ~23:20). Остановился ПОСЛЕ мержа C0-db, ДО старта
+C0-web — чтобы не упереться в лимит посреди атома. integration = 00025c7 (config+db),
+ветки атомов убраны, дерево чисто, ворота зелёные. Origin НЕ обновлён (push — в конце
+волны по новой политике).
+
+## СЛЕДУЮЩИЙ ШАГ (после сброса лимитов): C0-web
+- Каркас «Читальный зал»: templ + Tailwind, токены design/tokens.css, общий layout
+  (sticky-шапка, светлая/тёмная тема), htmx-хелперы, статика. По design/STYLE_GUIDE.md
+  (дизайн-пакет — найти/проверить наличие каталога design/ перед планированием).
+- Независим от config/db (чистая презентация). Worktree node/C0-web от integration.
+- Ворота C0-web: + `templ generate` и сборка Tailwind ПЕРЕД go build. Учесть в плане
+  toolchain (templ как tool-директива go.mod? как Makefile-цель?).
+- ПОСЛЕ C0-web → C0-auth (последний, блокер защищённых роутов; зависит от db+config).
+- Затем КОНЕЦ ВОЛНЫ C0: push integration на origin + PR (новая политика).
 
 ## Артефакты
 - Worktree C0-config: `.worktrees/C0-config`, ветка `node/C0-config` от integration.
