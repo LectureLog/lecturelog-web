@@ -13,11 +13,13 @@
 
 ## ВОЛНА B — мост к ядру (1 задача, последовательно)
 
-### B1 — coreclient из openapi
+### B1 — coreclient из openapi — **✅ Сделано** (ACCEPT=COMPLETE, REVIEW=APPROVE, GATE B зелёный)
 - Сгенерировать типизированный Go-клиент из `lecturelog-core/docs/openapi.json`
   (`oapi-codegen`). Встроить генерацию в сборку (`go generate` / Makefile).
-- Обёртка `coreclient/`: HMAC-подпись исходящих (§2, общий секрет с ядром),
-  конфиг endpoints ядра из `.env`.
+- Обёртка `coreclient/`: верификатор входящего вебхука ядра
+  (`VerifyWebhookSignature`, constant-time) + тип тела `WebhookPayload` (§2,
+  общий секрет с ядром); конфиг endpoints ядра из `.env`. Исходящие запросы к
+  ядру НЕ подписываются — ядро их подпись не проверяет.
 - Методы под наши сценарии: создать задачу (`POST /tasks` с s3_key/video_url),
   presigned-PUT (`POST /uploads`), статус (`GET /tasks/{id}`), удалить
   (`DELETE /tasks/{id}` — из A1).
@@ -45,7 +47,7 @@
   `LECTURELOG_WEBHOOK_SECRET` пуст/не задан, иначе верификация вебхука в C1-sync
   молча станет проходной. Валидация секрета — здесь, не в coreclient.
 
-> **ДОЛГ ДОКУМЕНТАЦИИ (из B1, закрыть на DOCS-шаге B1 или раньше).** Формулировка
+> **ДОЛГ ДОКУМЕНТАЦИИ (из B1) — ✅ ЗАКРЫТ на DOCS-шаге B1.** Формулировка
 > «HMAC-подпись **исходящих** запросов к ядру» неверна и противоречит реализации.
 > Места: `docs/TASKS.md` строка про обёртку `coreclient/` (ниже, B1) и
 > `docs/plans/2026-06-22-platform-design.md:305`. **Факт по коду ядра:** ядро НЕ

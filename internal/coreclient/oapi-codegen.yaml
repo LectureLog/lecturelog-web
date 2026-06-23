@@ -1,0 +1,7 @@
+# Конфиг генерации клиента ядра из OpenAPI-спеки.
+# Режим: типы моделей + клиент с типизированными ответами (ClientWithResponses).
+package: coreclient
+output: gen.go
+generate:
+  models: true
+  client: true
