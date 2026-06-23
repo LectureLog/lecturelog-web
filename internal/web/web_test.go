@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/LectureLog/lecturelog-web/internal/web"
+	"github.com/go-chi/chi/v5"
 )
 
 // renderLayout — вспомогательная функция: рендерит Layout в строку.
@@ -171,5 +172,76 @@ func TestRouter_StaticHtmx(t *testing.T) {
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("GET /static/vendor/htmx.min.js = %d, ожидается 200", rec.Code)
+	}
+}
+
+// TestRouter_WithMount проверяет монтирование дополнительных маршрутов через WithMount.
+func TestRouter_WithMount(t *testing.T) {
+	router := web.NewRouter(
+		web.WithMount(func(r chi.Router) {
+			r.Get("/test-mounted", func(w http.ResponseWriter, req *http.Request) {
+				w.WriteHeader(http.StatusTeapot) // 418 как маркер
+			})
+		}),
+	)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/test-mounted", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusTeapot {
+		t.Errorf("WithMount: /test-mounted = %d, ожидается 418", rec.Code)
+	}
+}
+
+// TestRouter_WithGlobalMiddleware проверяет применение глобального middleware.
+func TestRouter_WithGlobalMiddleware(t *testing.T) {
+	const headerName = "X-Test-MW"
+	const headerValue = "applied"
+
+	router := web.NewRouter(
+		web.WithGlobalMiddleware(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set(headerName, headerValue)
+				next.ServeHTTP(w, r)
+			})
+		}),
+	)
+
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Header().Get(headerName) != headerValue {
+		t.Errorf("WithGlobalMiddleware: заголовок %q = %q, ожидается %q",
+			headerName, rec.Header().Get(headerName), headerValue)
+	}
+}
+
+// TestRouter_ExistingRoutesUnchanged проверяет, что опции не ломают существующие маршруты.
+func TestRouter_ExistingRoutesUnchanged(t *testing.T) {
+	// С опциями — существующие маршруты должны работать
+	router := web.NewRouter(
+		web.WithGlobalMiddleware(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				next.ServeHTTP(w, r)
+			})
+		}),
+	)
+
+	// GET / должен по-прежнему работать
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	router.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET / с опциями = %d, ожидается 200", rec.Code)
+	}
+
+	// Статика должна работать
+	rec2 := httptest.NewRecorder()
+	req2 := httptest.NewRequest(http.MethodGet, "/static/css/app.css", nil)
+	router.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("GET /static/css/app.css с опциями = %d, ожидается 200", rec2.Code)
 	}
 }
