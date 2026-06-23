@@ -1,0 +1,203 @@
+/*
+  Входной CSS для Tailwind v4 (CSS-first подход).
+  Токены импортируются через @import; кастомная тема задаётся через @theme.
+  Результат собирается в static/css/app.css (коммитится).
+
+  Синхронизировать tokens.css с design/tokens.css при изменениях дизайна.
+*/
+
+@import "tailwindcss";
+
+/* Дизайн-токены «Читальный зал» — рантайм-копия design/tokens.css.
+   Синхронизировать при изменениях в design/tokens.css. */
+@import "./tokens.css";
+
+/*
+  Tailwind-тема на основе дизайн-токенов.
+  Все цвета резолвируются в var(--token) → тёмная тема работает «бесплатно»
+  через переопределение переменных в [data-theme="dark"].
+  Хардкод-цвета в .templ-шаблонах ЗАПРЕЩЕНЫ.
+*/
+@theme {
+  /* Цвета из токенов — тема резолвится через CSS-переменные */
+  --color-bg:          var(--bg);
+  --color-bg-2:        var(--bg-2);
+  --color-surface:     var(--surface);
+  --color-surface-2:   var(--surface-2);
+  --color-ink:         var(--ink);
+  --color-text-2:      var(--text-2);
+  --color-text-3:      var(--text-3);
+  --color-border:      var(--border);
+  --color-border-2:    var(--border-2);
+  --color-accent:      var(--accent);
+  --color-accent-2:    var(--accent-2);
+  --color-accent-soft: var(--accent-soft);
+  --color-rail:        var(--rail);
+  --color-mark:        var(--mark);
+  --color-mark-cur:    var(--mark-cur);
+
+  /* Шрифты из токенов */
+  --font-serif: var(--font-serif);
+  --font-sans:  var(--font-sans);
+
+  /* Радиусы из токенов */
+  --radius-card:  var(--r-card);
+  --radius-slide: var(--r-slide);
+  --radius-btn:   var(--r-btn);
+  --radius-pill:  var(--r-pill);
+  --radius-track: var(--r-track);
+
+  /* Тень из токенов */
+  --shadow-token: var(--shadow);
+
+  /* Высота шапки: sticky 58px (STYLE_GUIDE §4) */
+  --height-topbar: 58px;
+}
+
+/*
+  Компонентные стили layout «Читальный зал».
+  Используют только var(--token) — без хардкод-цветов.
+*/
+@layer components {
+  /* Шапка: sticky 58px, blur-фон, нижняя граница */
+  .ll-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    height: 58px;
+    background: color-mix(in srgb, var(--bg-2) 86%, transparent);
+    backdrop-filter: saturate(1.05) blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* Внутренний контейнер шапки: max-width, центрирование, flex */
+  .ll-topbar-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    height: 58px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 0 22px;
+    font-family: var(--font-sans);
+  }
+
+  /* Левая часть шапки: brand-mark + название */
+  .ll-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  /* Квадрат-логотип 24px, фон --accent */
+  .ll-brand-mark {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    background: var(--accent);
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--bg);
+  }
+
+  .ll-brand-mark svg {
+    width: 15px;
+    height: 15px;
+  }
+
+  /* Название продукта в шапке */
+  .ll-brand-t {
+    font-size: 15px;
+    color: var(--ink);
+    font-weight: 600;
+    white-space: nowrap;
+    letter-spacing: -0.02em;
+  }
+
+  /* Правая часть шапки: действия + тумблер */
+  .ll-top-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: none;
+  }
+
+  /* Иконочная кнопка 37×37 (STYLE_GUIDE §5) */
+  .ll-icon-btn {
+    width: 37px;
+    height: 37px;
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 10px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: 0.16s;
+  }
+
+  .ll-icon-btn:hover {
+    background: var(--surface-2);
+    color: var(--ink);
+  }
+
+  .ll-icon-btn svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+  }
+
+  /* Иконки луны/солнца для тумблера темы */
+  .ll-icon-moon,
+  .ll-icon-sun {
+    display: block;
+  }
+
+  /* Показываем луну в светлой теме, солнце в тёмной */
+  [data-theme="light"] .ll-icon-sun,
+  :root:not([data-theme="dark"]) .ll-icon-sun {
+    display: none;
+  }
+
+  [data-theme="dark"] .ll-icon-moon {
+    display: none;
+  }
+
+  [data-theme="dark"] .ll-icon-sun {
+    display: block;
+  }
+
+  /* Основной контент под шапкой */
+  .ll-main {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 34px 22px 120px;
+  }
+
+  /* Демо-секция (только для DemoPage) */
+  .ll-demo-content {
+    max-width: 768px;
+    margin: 0 auto;
+    font-family: var(--font-serif);
+    color: var(--ink);
+  }
+
+  .ll-demo-content h1 {
+    font-size: 43px;
+    font-weight: 600;
+    line-height: 1.12;
+    letter-spacing: -0.02em;
+    margin-bottom: 16px;
+  }
+
+  .ll-demo-content p {
+    font-size: 19px;
+    line-height: 1.78;
+    color: var(--text-2);
+  }
+}

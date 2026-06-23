@@ -29,10 +29,10 @@ tailwind-bin:
 	fi
 
 # Сборка CSS: токены + Tailwind utility-классы → static/css/app.css.
+# Tailwind v4 использует CSS-first конфиг (@theme в tailwind.css), не tailwind.config.js.
 # Запускается только при пересборке; собранный app.css коммитится.
 tailwind: tailwind-bin
 	$(TAILWIND_BIN) \
-		-c tailwind.config.js \
 		-i internal/web/assets/tailwind.css \
 		-o internal/web/static/css/app.css \
 		--minify
