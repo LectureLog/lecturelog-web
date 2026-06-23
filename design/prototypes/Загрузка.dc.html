@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500;1,8..60,600&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--bg);}
+  #up{
+    --bg:#f4f2eb; --bg-2:#efece3; --surface:#fbf9f3; --surface-2:#ece9df;
+    --ink:#26241e; --text-2:#6b665a; --text-3:#9c968a;
+    --border:#e3dfd2; --border-2:#d3cdbc;
+    --accent:#2f5a4c; --accent-2:#3c7060; --accent-soft:#e5ece7;
+    --rail:#d8d3c5; --mark:#f0d896; --mark-cur:#e6bd55;
+    --shadow:0 1px 2px rgba(40,34,20,.04),0 10px 30px rgba(40,34,20,.05);
+  }
+  #up[data-theme="dark"]{
+    --bg:#16151a; --bg-2:#1c1b20; --surface:#222127; --surface-2:#2a2931;
+    --ink:#ece8e0; --text-2:#a6a39d; --text-3:#726f6a;
+    --border:#2f2e36; --border-2:#3f3e48; --accent:#7fcab0; --accent-2:#97d8c1;
+    --accent-soft:#1d2a2a; --rail:#2f2e36; --mark:#574d2c; --mark-cur:#9a8338;
+    --shadow:0 1px 2px rgba(0,0,0,.34),0 14px 38px rgba(0,0,0,.42);
+  }
+  #up{font-family:'Source Serif 4',Georgia,serif;color:var(--ink);background:var(--bg);min-height:100vh;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;display:flex;flex-direction:column;}
+  #up ::selection{background:var(--mark);color:var(--ink);}
+  #up ::-webkit-scrollbar{width:11px;height:11px}
+  #up ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:6px;border:3px solid var(--bg)}
+
+  /* topbar */
+  .topbar{position:sticky;top:0;z-index:50;background:color-mix(in srgb,var(--bg-2) 86%,transparent);
+    backdrop-filter:saturate(1.05) blur(12px);border-bottom:1px solid var(--border);}
+  .topbar-inner{max-width:1180px;margin:0 auto;height:58px;display:flex;align-items:center;gap:14px;
+    padding:0 22px;font-family:'Onest',sans-serif;}
+  .brand{display:flex;align-items:center;gap:11px;min-width:0;flex:1;}
+  .brand-mark{width:24px;height:24px;border-radius:6px;background:var(--accent);flex:none;display:flex;align-items:center;justify-content:center;}
+  .brand-mark svg{width:15px;height:15px;color:var(--bg);}
+  .brand-t{font-size:15px;color:var(--ink);font-weight:600;white-space:nowrap;letter-spacing:-.02em;}
+  .top-actions{display:flex;align-items:center;gap:6px;flex:none;}
+  .icon-btn{width:37px;height:37px;border:1px solid transparent;background:transparent;border-radius:10px;
+    color:var(--text-2);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;transition:.16s;}
+  .icon-btn:hover{background:var(--surface-2);color:var(--ink);}
+  .icon-btn svg{width:18px;height:18px;display:block;}
+  .ghost{height:37px;padding:0 14px;border:1px solid transparent;background:transparent;border-radius:10px;
+    color:var(--text-2);cursor:pointer;font-family:'Onest',sans-serif;font-size:13px;font-weight:500;
+    display:inline-flex;align-items:center;gap:8px;transition:.16s;white-space:nowrap;}
+  .ghost:hover{background:var(--surface-2);color:var(--ink);}
+  .ghost svg{width:15px;height:15px;}
+
+  /* layout */
+  .wrap{flex:1;display:flex;justify-content:center;}
+  .col{width:100%;max-width:660px;padding:54px 32px 120px;font-family:'Onest',sans-serif;}
+
+  /* demo state bar */
+  .demo{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;margin-bottom:30px;}
+  .demo-l{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--text-3);font-weight:600;margin-right:2px;}
+  .chip{font-family:'Onest',sans-serif;font-size:12px;font-weight:500;color:var(--text-2);background:var(--surface);
+    border:1px solid var(--border-2);border-radius:7px;padding:5px 11px;cursor:pointer;transition:.14s;}
+  .chip:hover{border-color:var(--accent);color:var(--accent);}
+  .chip.on{background:var(--accent);border-color:var(--accent);color:var(--bg);}
+
+  .kicker{font-size:11.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:16px;}
+  .h1{font-family:'Source Serif 4',serif;font-weight:600;font-size:43px;line-height:1.12;letter-spacing:-.02em;margin:0 0 16px;color:var(--ink);text-wrap:balance;}
+  .dek{font-family:'Source Serif 4',serif;font-style:italic;font-size:20px;line-height:1.55;color:var(--text-2);margin:0 0 30px;max-width:54ch;}
+
+  /* segmented mode */
+  .seg{display:inline-flex;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:3px;gap:3px;margin-bottom:22px;}
+  .seg button{font-family:'Onest',sans-serif;font-size:13px;font-weight:500;color:var(--text-2);background:transparent;border:none;
+    border-radius:8px;padding:8px 18px;cursor:pointer;transition:.14s;display:inline-flex;align-items:center;gap:7px;}
+  .seg button svg{width:15px;height:15px;}
+  .seg button.on{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);}
+
+  /* drop zone */
+  .drop{border:1.5px dashed var(--border-2);border-radius:13px;background:var(--surface);padding:52px 40px;text-align:center;
+    transition:border-color .18s,background .18s;position:relative;}
+  .drop.over{border-color:var(--accent);background:var(--accent-soft);}
+  .drop.error{border-color:var(--border-2);}
+  .drop-ico{width:58px;height:58px;border-radius:50%;background:var(--accent-soft);color:var(--accent);
+    display:inline-flex;align-items:center;justify-content:center;margin-bottom:18px;transition:.18s;}
+  .drop.over .drop-ico{transform:translateY(-3px);}
+  .drop-ico svg{width:26px;height:26px;}
+  .drop-t{font-family:'Source Serif 4',serif;font-size:21px;font-weight:600;color:var(--ink);margin:0 0 4px;letter-spacing:-.01em;}
+  .drop-s{font-size:13.5px;color:var(--text-2);margin:0 0 18px;}
+  .drop-s b{color:var(--accent);font-weight:600;}
+  .pick{height:38px;padding:0 18px;border:1px solid var(--border-2);background:var(--bg);border-radius:10px;color:var(--ink);
+    cursor:pointer;font-family:'Onest',sans-serif;font-size:13px;font-weight:500;display:inline-flex;align-items:center;gap:8px;transition:.16s;}
+  .pick:hover{border-color:var(--accent);color:var(--accent);}
+  .pick svg{width:15px;height:15px;}
+  .formats{font-size:12px;color:var(--text-3);margin:18px 0 0;font-variant-numeric:tabular-nums;}
+
+  /* selected file card */
+  .filecard{display:flex;align-items:center;gap:14px;text-align:left;}
+  .file-ico{width:46px;height:46px;border-radius:10px;background:var(--accent-soft);color:var(--accent);flex:none;
+    display:inline-flex;align-items:center;justify-content:center;}
+  .file-ico svg{width:22px;height:22px;}
+  .file-meta{flex:1;min-width:0;}
+  .file-name{font-family:'Source Serif 4',serif;font-size:18px;font-weight:600;color:var(--ink);letter-spacing:-.01em;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .file-sub{font-size:12.5px;color:var(--text-3);margin-top:3px;font-variant-numeric:tabular-nums;}
+  .file-x{width:34px;height:34px;border-radius:9px;border:1px solid var(--border-2);background:transparent;color:var(--text-2);
+    cursor:pointer;flex:none;display:inline-flex;align-items:center;justify-content:center;transition:.14s;}
+  .file-x:hover{border-color:var(--accent);color:var(--accent);}
+  .file-x svg{width:15px;height:15px;}
+  .file-bar{height:4px;border-radius:3px;background:var(--surface-2);border:1px solid var(--border);margin-top:13px;overflow:hidden;}
+  .file-bar > i{display:block;height:100%;width:100%;background:var(--accent);}
+
+  /* error note */
+  .errnote{display:none;align-items:center;gap:9px;margin-top:16px;font-size:13px;color:var(--text-2);
+    background:var(--surface);border:1px solid var(--border-2);border-radius:9px;padding:10px 13px;text-align:left;}
+  .errnote svg{width:16px;height:16px;color:var(--text-2);flex:none;}
+  .drop.error .errnote{display:flex;}
+
+  /* url panel */
+  .urlbox{display:none;}
+  .url-field{display:flex;align-items:center;gap:11px;background:var(--surface);border:1px solid var(--border-2);
+    border-radius:12px;padding:0 15px;height:54px;}
+  .url-field svg{width:18px;height:18px;color:var(--text-3);flex:none;}
+  .url-field input{flex:1;border:none;background:transparent;outline:none;color:var(--ink);
+    font-family:'Onest',sans-serif;font-size:15px;}
+  .url-field input::placeholder{color:var(--text-3);}
+  .url-hint{font-size:12.5px;color:var(--text-3);margin:12px 2px 0;}
+
+  /* optional slides zone */
+  .subzone{margin-top:16px;border:1px dashed var(--border);border-radius:12px;background:transparent;padding:16px 18px;
+    display:flex;align-items:center;gap:14px;transition:.16s;}
+  .subzone.over{border-color:var(--accent);background:var(--accent-soft);}
+  .subzone.has{border-style:solid;border-color:var(--border-2);background:var(--surface);}
+  .sub-ico{width:38px;height:38px;border-radius:9px;background:var(--surface-2);color:var(--text-2);flex:none;
+    display:inline-flex;align-items:center;justify-content:center;}
+  .subzone.has .sub-ico{background:var(--accent-soft);color:var(--accent);}
+  .sub-ico svg{width:18px;height:18px;}
+  .sub-txt{flex:1;min-width:0;}
+  .sub-t{font-size:13.5px;font-weight:600;color:var(--ink);}
+  .sub-s{font-size:12px;color:var(--text-3);margin-top:2px;}
+  .sub-act{font-family:'Onest',sans-serif;font-size:12.5px;font-weight:600;color:var(--accent);background:transparent;
+    border:none;cursor:pointer;flex:none;padding:6px 4px;}
+  .sub-act:hover{color:var(--accent-2);text-decoration:underline;}
+
+  /* options */
+  .opts{margin-top:26px;border-top:1px solid var(--border);padding-top:22px;}
+  .opt{display:flex;align-items:flex-start;gap:14px;}
+  .opt-txt{flex:1;}
+  .opt-t{font-family:'Source Serif 4',serif;font-size:17px;font-weight:600;color:var(--ink);letter-spacing:-.005em;}
+  .opt-s{font-size:13px;color:var(--text-2);line-height:1.5;margin-top:3px;max-width:46ch;}
+  .tgl{width:44px;height:25px;border-radius:13px;background:var(--surface-2);border:1px solid var(--border-2);
+    position:relative;cursor:pointer;flex:none;transition:.18s;margin-top:2px;}
+  .tgl::after{content:"";position:absolute;top:2px;left:2px;width:19px;height:19px;border-radius:50%;background:var(--bg);
+    box-shadow:0 1px 2px rgba(0,0,0,.2);transition:.18s;}
+  .tgl.on{background:var(--accent);border-color:var(--accent);}
+  .tgl.on::after{left:21px;background:var(--surface);}
+
+  /* CTA */
+  .cta-row{margin-top:34px;display:flex;align-items:center;gap:18px;}
+  .cta{height:50px;padding:0 30px;border:none;border-radius:11px;background:var(--accent);color:var(--bg);cursor:pointer;
+    font-family:'Onest',sans-serif;font-size:14.5px;font-weight:600;display:inline-flex;align-items:center;gap:10px;transition:.16s;}
+  .cta:hover{background:var(--accent-2);}
+  .cta svg{width:17px;height:17px;}
+  .cta[disabled]{opacity:.42;cursor:not-allowed;background:var(--accent);}
+  .cta-note{font-size:12.5px;color:var(--text-3);line-height:1.45;}
+
+  @media (max-width:620px){
+    .topbar-inner{padding:0 14px;}
+    .col{padding:34px 18px 90px;}
+    .h1{font-size:30px;}
+    .dek{font-size:18px;}
+    .drop{padding:40px 22px;}
+    .demo{justify-content:flex-start;}
+    .ghost-label{display:none;}
+    .cta-row{flex-direction:column;align-items:stretch;}
+    .cta{justify-content:center;}
+    .icon-btn{width:44px;height:44px;}
+  }
+</style>
+</helmet>
+
+<div id="up" data-theme="light" data-screen-label="Загрузка">
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <span class="brand-mark"><svg viewBox="0 0 256 256" fill="currentColor"><path d="M208,32V192H72a24,24,0,0,0-24,24V56A24,24,0,0,1,72,32h40v96l32-24,32,24V32Z" opacity="0.2"></path><path d="M208,24H72A32,32,0,0,0,40,56V224a8,8,0,0,0,8,8H192a8,8,0,0,0,0-16H56a16,16,0,0,1,16-16H208a8,8,0,0,0,8-8V32A8,8,0,0,0,208,24ZM120,40h48v72L148.79,97.6a8,8,0,0,0-9.6,0L120,112Zm80,144H72a31.82,31.82,0,0,0-16,4.29V56A16,16,0,0,1,72,40h32v88a8,8,0,0,0,12.8,6.4L144,114l27.21,20.4A8,8,0,0,0,176,136a8.1,8.1,0,0,0,3.58-.84A8,8,0,0,0,184,128V40h16Z"></path></svg></span>
+        <span class="brand-t">lecture<span style="color:var(--accent);">log</span></span>
+      </div>
+      <div class="top-actions">
+        <button class="ghost" id="libBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>
+          <span class="ghost-label">Мои конспекты</span>
+        </button>
+        <button class="icon-btn" id="themeBtn" aria-label="Сменить тему">
+          <svg id="iconMoon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+          <svg id="iconSun" style="display:none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <div class="col">
+
+      <div class="demo">
+        <span class="demo-l">Состояние</span>
+        <button class="chip on" data-st="empty">Пусто</button>
+        <button class="chip" data-st="over">Перетаскивание</button>
+        <button class="chip" data-st="selected">Файл выбран</button>
+        <button class="chip" data-st="error">Ошибка</button>
+      </div>
+
+      <div class="kicker">Загрузка лекции</div>
+      <h1 class="h1">Новый конспект</h1>
+      <p class="dek">Загрузите запись лекции — мы расшифруем её, разобьём по темам и соберём структурированный конспект с тайм-кодами и слайдами.</p>
+
+      <div class="seg" id="seg">
+        <button class="on" data-mode="file"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v5h5"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>Файл</button>
+        <button data-mode="url"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>Ссылка</button>
+      </div>
+
+      <!-- FILE PANEL -->
+      <div class="filebox" id="filebox">
+        <div class="drop" id="drop">
+          <div class="drop-empty" id="dropEmpty">
+            <div class="drop-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V4M12 4L7 9M12 4l5 5"/><path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg></div>
+            <p class="drop-t">Перетащите файл сюда</p>
+            <p class="drop-s">или <b>выберите на устройстве</b></p>
+            <button class="pick" id="pickBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 3v5h5"/><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/></svg>Выбрать файл</button>
+            <p class="formats">MP4 · MOV · MP3 · WAV · M4A — до 2&nbsp;ГБ</p>
+          </div>
+
+          <div class="filecard" id="dropFile" style="display:none">
+            <span class="file-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9l5 3-5 3z" fill="currentColor" stroke="none"/></svg></span>
+            <div class="file-meta">
+              <div class="file-name" id="fileName">Лекция — AI Fluency.mp4</div>
+              <div class="file-sub" id="fileSub">видео · 412 МБ · готов к обработке</div>
+              <div class="file-bar"><i></i></div>
+            </div>
+            <button class="file-x" id="fileX" aria-label="Убрать файл"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+          </div>
+
+          <div class="errnote">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l9 16H3z"/><path d="M12 9v4M12 16.5v.5"/></svg>
+            <span>Формат не поддерживается. Нужен аудио- или видеофайл: MP4, MOV, MP3, WAV, M4A.</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- URL PANEL -->
+      <div class="urlbox" id="urlbox">
+        <div class="url-field">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"/><path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"/></svg>
+          <input id="urlInput" type="text" placeholder="Вставьте ссылку на YouTube или прямой URL записи" autocomplete="off">
+        </div>
+        <p class="url-hint">Поддерживаются YouTube и прямые ссылки на аудио/видео.</p>
+      </div>
+
+      <!-- OPTIONAL SLIDES -->
+      <div class="subzone" id="subzone">
+        <span class="sub-ico" id="subIco"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></span>
+        <div class="sub-txt">
+          <div class="sub-t" id="subT">Слайды презентации — необязательно</div>
+          <div class="sub-s" id="subS">PDF, PPTX или изображения. Привяжем к фрагментам автоматически.</div>
+        </div>
+        <button class="sub-act" id="subBtn">Добавить</button>
+      </div>
+
+      <!-- OPTIONS -->
+      <div class="opts" id="optsBlock">
+        <div class="opt">
+          <div class="opt-txt">
+            <div class="opt-t">Извлекать слайды из видео</div>
+            <div class="opt-s">Находим кадры со слайдами в записи и вставляем их в нужные подтемы конспекта.</div>
+          </div>
+          <div class="tgl on" id="tglExtract" role="switch" aria-checked="true"></div>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="cta-row">
+        <button class="cta" id="cta" disabled>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3l14 9-14 9z" fill="currentColor" stroke="none"/></svg>
+          Сгенерировать конспект
+        </button>
+        <span class="cta-note">Обработка часовой лекции занимает&nbsp;~3–5&nbsp;минут.</span>
+      </div>
+
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept="video/*,audio/*,.mp4,.mov,.mp3,.wav,.m4a" style="display:none">
+  <input type="file" id="slidesInput" accept=".pdf,.pptx,image/*" style="display:none">
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showSlidesZone&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;extractSlidesDefault&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;defaultMode&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;default&quot;:&quot;file&quot;,&quot;options&quot;:[&quot;file&quot;,&quot;url&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  componentDidMount() {
+    const root = document.getElementById('up');
+    const $ = (s) => root.querySelector(s);
+    const $$ = (s) => Array.from(root.querySelectorAll(s));
+    const P = this.props || {};
+
+    /* THEME (shared key with viewer) */
+    const moon = $('#iconMoon'), sun = $('#iconSun');
+    const applyTheme = (t) => {
+      root.setAttribute('data-theme', t);
+      moon.style.display = t === 'dark' ? 'none' : 'block';
+      sun.style.display = t === 'dark' ? 'block' : 'none';
+    };
+    applyTheme(localStorage.getItem('notes_theme') || 'light');
+    $('#themeBtn').addEventListener('click', () => {
+      const t = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('notes_theme', t); applyTheme(t);
+    });
+
+    /* refs */
+    const drop = $('#drop'), dropEmpty = $('#dropEmpty'), dropFile = $('#dropFile');
+    const fileName = $('#fileName'), fileSub = $('#fileSub');
+    const seg = $('#seg'), filebox = $('#filebox'), urlbox = $('#urlbox');
+    const subzone = $('#subzone'), subT = $('#subT'), subS = $('#subS'), subBtn = $('#subBtn'), subIco = $('#subIco');
+    const optsBlock = $('#optsBlock'), tglExtract = $('#tglExtract');
+    const cta = $('#cta'), urlInput = $('#urlInput');
+    const fileInput = $('#fileInput'), slidesInput = $('#slidesInput');
+
+    let state = { mode: 'file', file: null, fileKind: null, slides: null, url: '', extract: true };
+
+    /* props */
+    if (P.showSlidesZone === false) subzone.style.display = 'none';
+    if (P.extractSlidesDefault === false) { state.extract = false; tglExtract.classList.remove('on'); tglExtract.setAttribute('aria-checked','false'); }
+    const initMode = P.defaultMode === 'url' ? 'url' : 'file';
+
+    /* helpers */
+    const fmtSize = (b) => b >= 1073741824 ? (b/1073741824).toFixed(1)+' ГБ' : Math.max(1,Math.round(b/1048576))+' МБ';
+    const isMedia = (f) => /\.(mp4|mov|m4v|webm|mkv|mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name) || /^(audio|video)\//.test(f.type||'');
+    const kindOf = (f) => (/^audio\//.test(f.type) || /\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(f.name)) ? 'аудио' : 'видео';
+
+    const updateOpts = () => {
+      const isVideo = (state.mode === 'file' && state.file && state.fileKind === 'видео')
+        || (state.mode === 'url' && state.url.trim().length > 4);
+      optsBlock.style.display = isVideo ? 'block' : 'none';
+    };
+    const refreshCTA = () => {
+      const ready = (state.mode === 'file' && state.file) || (state.mode === 'url' && state.url.trim().length > 4);
+      cta.disabled = !ready;
+      updateOpts();
+    };
+
+    const showFile = (f) => {
+      state.file = f; state.fileKind = kindOf(f);
+      fileName.textContent = f.name;
+      fileSub.textContent = kindOf(f) + ' · ' + fmtSize(f.size) + ' · готов к обработке';
+      drop.classList.remove('error','over');
+      dropEmpty.style.display = 'none'; dropFile.style.display = 'flex';
+      refreshCTA();
+    };
+    const showEmpty = () => {
+      state.file = null; state.fileKind = null;
+      drop.classList.remove('error','over');
+      dropFile.style.display = 'none'; dropEmpty.style.display = 'block';
+      refreshCTA();
+    };
+    const showError = () => {
+      state.file = null; state.fileKind = null;
+      dropFile.style.display = 'none'; dropEmpty.style.display = 'block';
+      drop.classList.remove('over'); drop.classList.add('error');
+      refreshCTA();
+    };
+
+    /* mode switch */
+    const setMode = (m) => {
+      state.mode = m;
+      $$('#seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+      filebox.style.display = m === 'file' ? 'block' : 'none';
+      urlbox.style.display = m === 'url' ? 'block' : 'none';
+      refreshCTA();
+    };
+    seg.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) setMode(b.dataset.mode); });
+
+    /* file picking */
+    const pickFile = () => fileInput.click();
+    $('#pickBtn').addEventListener('click', pickFile);
+    fileInput.addEventListener('change', (e) => {
+      const f = e.target.files && e.target.files[0]; if (!f) return;
+      isMedia(f) ? showFile(f) : showError();
+      fileInput.value = '';
+    });
+    $('#fileX').addEventListener('click', showEmpty);
+
+    /* drag & drop on main zone */
+    let dc = 0;
+    ['dragenter','dragover'].forEach(ev => drop.addEventListener(ev, (e) => { e.preventDefault(); if (ev==='dragenter') dc++; drop.classList.add('over'); }));
+    drop.addEventListener('dragleave', (e) => { e.preventDefault(); if (--dc <= 0) { dc=0; drop.classList.remove('over'); } });
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault(); dc = 0; drop.classList.remove('over');
+      const f = e.dataTransfer.files && e.dataTransfer.files[0]; if (!f) return;
+      isMedia(f) ? showFile(f) : showError();
+    });
+
+    /* slides zone */
+    const showSlides = (f) => {
+      state.slides = f;
+      subzone.classList.add('has'); subzone.classList.remove('over');
+      subT.textContent = f.name;
+      subS.textContent = fmtSize(f.size) + ' · будет привязано к фрагментам';
+      subBtn.textContent = 'Убрать';
+      subIco.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 13l4 4L19 7"/></svg>';
+    };
+    const clearSlides = () => {
+      state.slides = null;
+      subzone.classList.remove('has');
+      subT.textContent = 'Слайды презентации — необязательно';
+      subS.textContent = 'PDF, PPTX или изображения. Привяжем к фрагментам автоматически.';
+      subBtn.textContent = 'Добавить';
+      subIco.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg>';
+    };
+    subBtn.addEventListener('click', () => state.slides ? clearSlides() : slidesInput.click());
+    slidesInput.addEventListener('change', (e) => { const f = e.target.files && e.target.files[0]; if (f) showSlides(f); slidesInput.value=''; });
+    let sc = 0;
+    ['dragenter','dragover'].forEach(ev => subzone.addEventListener(ev, (e) => { e.preventDefault(); if (ev==='dragenter') sc++; subzone.classList.add('over'); }));
+    subzone.addEventListener('dragleave', (e) => { e.preventDefault(); if (--sc<=0){sc=0;subzone.classList.remove('over');} });
+    subzone.addEventListener('drop', (e) => { e.preventDefault(); sc=0; subzone.classList.remove('over'); const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if (f) showSlides(f); });
+
+    /* extract toggle */
+    tglExtract.addEventListener('click', () => {
+      state.extract = !state.extract;
+      tglExtract.classList.toggle('on', state.extract);
+      tglExtract.setAttribute('aria-checked', String(state.extract));
+    });
+
+    /* url */
+    urlInput.addEventListener('input', (e) => { state.url = e.target.value; refreshCTA(); });
+
+    /* demo state chips (review only) */
+    const mockFile = { name: 'Лекция — AI Fluency.mp4', size: 432013312, type: 'video/mp4' };
+    const setDemo = (st) => {
+      setMode('file');
+      if (st === 'empty') showEmpty();
+      else if (st === 'over') { showEmpty(); drop.classList.add('over'); }
+      else if (st === 'selected') { fileName.textContent = mockFile.name; fileSub.textContent = 'видео · '+fmtSize(mockFile.size)+' · готов к обработке'; drop.classList.remove('error','over'); dropEmpty.style.display='none'; dropFile.style.display='flex'; state.file = mockFile; state.fileKind = 'видео'; refreshCTA(); }
+      else if (st === 'error') showError();
+    };
+    $$('.chip').forEach(c => c.addEventListener('click', () => {
+      $$('.chip').forEach(x => x.classList.remove('on')); c.classList.add('on');
+      setDemo(c.dataset.st);
+    }));
+
+    /* library button — placeholder nav */
+    $('#libBtn').addEventListener('click', () => { window.location.href = 'Конспект.dc.html'; });
+
+    setMode(initMode);
+    showEmpty();
+  }
+}
+</script>
+</body>
+</html>
