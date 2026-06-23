@@ -1,4 +1,4 @@
-# HANDOFF — Волна B / задача B1 (coreclient). Пауза до сброса лимитов.
+# HANDOFF — Волна B / задача B1 (coreclient). Готов к DOCS+PR.
 
 > Этот файл — точка возобновления в ЧИСТОМ чате. Прочитай его первым.
 > Роль ведущей сессии — **ОРКЕСТРАТОР** (см. `docs/WORKFLOW.md`): код руками НЕ
@@ -13,13 +13,38 @@
 1. PLAN     ✅ сделано  → PLAN.md в worktree (в git exclude, НЕ коммитить)
 2. ISOLATE  ✅ сделано  → worktree .worktrees/B1-coreclient, ветка node/B1-coreclient от integration
 3. BUILD    ✅ сделано  → код+тесты, ворота ЗЕЛЁНЫЕ (проверено оркестратором фактически)
-4. ACCEPT   ⏳ СЛЕДУЮЩИЙ ШАГ → приёмка (general-purpose, НЕ исполнитель): ворота + смысл по плану
-5. REVIEW   ⬜ не начато → superpowers:code-reviewer: качество/стандарты/контракт
-6. LOOP     ⬜ при замечаниях → возврат исполнителю, тот же worktree, лимит 3 круга
-7. MERGE    ⬜ зелено → авто-мерж в integration. ВЛАДЕЛЕЦ ПРОЦЕССА выбрал автономию
-            «до MERGE»: ОСТАНОВИТЬСЯ перед авто-мержем и спросить человека.
-8. DOCS     ⬜ отдельным субагентом (правило пользователя)
+4. ACCEPT   ✅ COMPLETE → приёмщик (general-purpose, ≠ исполнитель): ворота 4/4 exit 0,
+            генерация детерминирована, 7 инвариантов + чек-лист GATE B подтверждены. Пробелов нет.
+5. REVIEW   ✅ APPROVE  → superpowers:code-reviewer: блокеров нет. 5 некритичных замечаний,
+            ВСЕ вне scope B1 (на будущие волны): 422-detail, fail-fast пустого секрета (→C0-config),
+            any vs interface{}, файловые источники (→C1-upload), genDoer-обёртка.
+6. LOOP     ✅ не понадобился (REVIEW=APPROVE без блокеров)
+7. MERGE    ⏳ РЕШЕНО владельцем процесса: порядок «DOCS-в-ветке → один PR (код+доки)».
+            ВЫБОР ВЛАДЕЛЬЦА: НЕ авто-мерж, а PR через gh → человек примет PR сам.
+8. DOCS     ⏳ СЛЕДУЮЩИЙ ШАГ → отдельным субагентом В ВЕТКЕ node/B1-coreclient (не в integration):
+            создать README, закрыть долг HMAC-формулировок, отметить B1 done в TASKS.md.
 ```
+
+## Долги/задачи, зафиксированные при обсуждении B1 (коммит 5876a8a в integration, docs/TASKS.md)
+1. **C0-config — fail-fast на пустом webhook-секрете.** VerifyWebhookSignature при пустом
+   секрете может вернуть true; C0-config обязан падать на старте при пустом
+   LECTURELOG_WEBHOOK_SECRET. Валидация — в config, не в coreclient.
+2. **ДОЛГ ДОКУМЕНТАЦИИ (закрыть на DOCS-шаге B1).** «HMAC-подпись ИСХОДЯЩИХ» неверна.
+   Места: docs/TASKS.md (строка про обёртку coreclient/, B1) и
+   docs/plans/2026-06-22-platform-design.md:305. Факт (сверено по коду ядра
+   lecturelog-core/.../webhook/http_notifier.py): ядро САМО подписывает вебхук
+   ядро→платформа (X-Webhook-Signature = HMAC-SHA256 от байтов тела, sort_keys,
+   ensure_ascii=False), платформа верифицирует. Исходящие платформа→ядро НЕ подписываются.
+   В ядро ничего интегрировать НЕ нужно — долг чисто документационный.
+3. **C1-upload — валидация контента на платформе ДО ядра.** Расширение/MIME/размер/URL
+   на загрузке (входная гигиена), НЕ дублирование доменных enum'ов ядра. Место — upload,
+   не coreclient (туда уходит s3_key/video_url, не файл).
+
+## Состояние remote (для PR)
+- origin = git@github.com:LectureLog/lecturelog-web.git, gh авторизован (fUS1ONd).
+- Ветки integration и node/B1-coreclient — ТОЛЬКО ЛОКАЛЬНЫЕ. Для PR нужен push обеих
+  на origin (первый push веток в публичный remote — подтвердить с человеком перед push).
+- README в проекте ещё НЕТ — DOCS-агент создаёт его.
 
 ## Автономия (решение владельца процесса)
 Веду атом автономно до MERGE; **стоп перед авто-мержем в integration** для решения
