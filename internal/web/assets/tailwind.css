@@ -8,6 +8,10 @@
 
 @import "tailwindcss";
 
+/* Сканирование templ-шаблонов для purge (Tailwind v4 CSS-first, @source вместо content[]).
+   Путь ../  относительно assets/ — покрывает internal/web/**  включая C1-шаблоны. */
+@source "../";
+
 /* Дизайн-токены «Читальный зал» — рантайм-копия design/tokens.css.
    Синхронизировать при изменениях в design/tokens.css. */
 @import "./tokens.css";
@@ -144,6 +148,12 @@
   .ll-icon-btn:hover {
     background: var(--surface-2);
     color: var(--ink);
+  }
+
+  /* Клавиатурный фокус (a11y, STYLE_GUIDE §8): видимый outline через токен акцента */
+  .ll-icon-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
   }
 
   .ll-icon-btn svg {
