@@ -1,0 +1,81 @@
+package web
+
+// LayoutData — данные шапки и документа базового каркаса.
+type LayoutData struct {
+	// Title — заголовок вкладки браузера и название в шапке.
+	Title string
+}
+
+// Layout — базовый каркас «Читальный зал».
+// actions — опциональный слот действий в правой части шапки (nil → только тумблер темы).
+templ Layout(data LayoutData, actions templ.Component) {
+	<!DOCTYPE html>
+	<html lang="ru" data-theme="light">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<!-- Инлайн-скрипт темы: читает localStorage до first paint, устраняет FOUC -->
+			<script>
+				(function(){
+					var t = localStorage.getItem('ll_theme');
+					if (t === 'dark' || t === 'light') {
+						document.documentElement.setAttribute('data-theme', t);
+					}
+				})();
+			</script>
+			<!-- Google Fonts: Source Serif 4 (контент) + Onest (интерфейс) -->
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500;1,8..60,600&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+			<link rel="stylesheet" href="/static/css/app.css"/>
+			<script src="/static/vendor/htmx.min.js" defer></script>
+			<title>{ data.Title }</title>
+		</head>
+		<!-- hx-headers — место под CSRF-токен, подставит C0-auth -->
+		<body hx-headers="{}">
+			@header(data, actions)
+			<main class="ll-main">
+				{ children... }
+			</main>
+		</body>
+	</html>
+}
+
+// header — sticky-шапка 58px: brand-mark слева, actions+тумблер справа.
+templ header(data LayoutData, actions templ.Component) {
+	<header class="ll-topbar">
+		<div class="ll-topbar-inner">
+			<div class="ll-brand">
+				@brandMark()
+				<span class="ll-brand-t">{ data.Title }</span>
+			</div>
+			<div class="ll-top-actions">
+				if actions != nil {
+					@actions
+				}
+				@themeToggle()
+			</div>
+		</div>
+	</header>
+}
+
+// themeToggle — кнопка переключения светлой/тёмной темы.
+templ themeToggle() {
+	<button
+		class="ll-icon-btn"
+		aria-label="Сменить тему"
+		onclick="(function(btn){var root=document.documentElement;var t=root.getAttribute('data-theme')==='dark'?'light':'dark';root.setAttribute('data-theme',t);localStorage.setItem('ll_theme',t);})(this)"
+	>
+		<!-- Иконка луны (светлая тема активна) -->
+		@iconMoon()
+		<!-- Иконка солнца (тёмная тема активна) -->
+		@iconSun()
+	</button>
+}
+
+// brandMark — логотип-квадрат 24px цвета --accent с иконкой книги.
+templ brandMark() {
+	<span class="ll-brand-mark">
+		@iconBook()
+	</span>
+}
