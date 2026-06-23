@@ -1,0 +1,24 @@
+package web
+
+// iconBook — иконка книги для brand-mark (stroke 2px, fill=none, viewBox 0 0 24 24).
+templ iconBook() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+		<path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5z"></path>
+	</svg>
+}
+
+// iconMoon — иконка луны для переключателя темы (отображается в светлой теме).
+templ iconMoon() {
+	<svg class="ll-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path>
+	</svg>
+}
+
+// iconSun — иконка солнца для переключателя темы (отображается в тёмной теме).
+templ iconSun() {
+	<svg class="ll-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<circle cx="12" cy="12" r="4.5"></circle>
+		<path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"></path>
+	</svg>
+}

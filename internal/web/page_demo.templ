@@ -1,0 +1,12 @@
+package web
+
+// DemoPage — демонстрационная страница, обёрнутая в базовый Layout.
+// Используется только для ручной проверки и тестов — C1 заменит доменными страницами.
+templ DemoPage() {
+	@Layout(LayoutData{Title: "LectureLog"}, nil) {
+		<section class="ll-demo-content">
+			<h1>Читальный зал</h1>
+			<p>Добро пожаловать в LectureLog — конспекты лекций с тайм-кодами.</p>
+		</section>
+	}
+}
