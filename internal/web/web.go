@@ -12,18 +12,60 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 )
 
+// options — внутренняя конфигурация NewRouter.
+type options struct {
+	// globalMiddleware — middleware, применяемые ко всем маршрутам роутера.
+	globalMiddleware []func(http.Handler) http.Handler
+	// mounts — функции монтирования дополнительных маршрутов (auth и др.).
+	mounts []func(chi.Router)
+}
+
+// Option — функциональная опция NewRouter.
+type Option func(*options)
+
+// WithGlobalMiddleware добавляет middleware ко всем маршрутам роутера.
+// Порядок применения: в порядке передачи опций.
+// Используется для LoadSession (auth), CSRF, логирования и т.п.
+func WithGlobalMiddleware(mw ...func(http.Handler) http.Handler) Option {
+	return func(o *options) {
+		o.globalMiddleware = append(o.globalMiddleware, mw...)
+	}
+}
+
+// WithMount добавляет функцию монтирования дополнительных маршрутов.
+// fn получает chi.Router и монтирует маршруты/группы.
+// Используется для auth.Service.Mount и других доменных модулей.
+func WithMount(fn func(chi.Router)) Option {
+	return func(o *options) {
+		o.mounts = append(o.mounts, fn)
+	}
+}
+
 // NewRouter создаёт минимальный chi-роутер web-слоя.
 //
 // Маршруты:
 //   - /static/* — отдача встроенной статики (CSS, htmx, шрифты)
 //   - /          — демо-страница с базовым layout «Читальный зал»
 //
-// C0-auth смонтирует дополнительные маршруты поверх этого роутера.
-func NewRouter() http.Handler {
+// Опции (variadic, обратная совместимость — существующие NewRouter() вызовы не ломаются):
+//   - WithGlobalMiddleware — дополнительные middleware для всех маршрутов
+//   - WithMount — монтирование дополнительных маршрутов (auth и др.)
+func NewRouter(opts ...Option) http.Handler {
+	// Применяем опции
+	o := &options{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
 	r := chi.NewRouter()
 
 	// Стандартные middleware: восстановление после паники, логирование.
 	r.Use(middleware.Recoverer)
+
+	// Применяем глобальные middleware из опций (LoadSession, CSRF и т.п.)
+	for _, mw := range o.globalMiddleware {
+		r.Use(mw)
+	}
 
 	// Статика через go:embed — CSS, htmx и другие ресурсы.
 	sfs, err := staticFS()
@@ -41,6 +83,11 @@ func NewRouter() http.Handler {
 			http.Error(w, "ошибка рендера", http.StatusInternalServerError)
 		}
 	})
+
+	// Монтируем дополнительные маршруты из опций (auth и др.)
+	for _, mount := range o.mounts {
+		mount(r)
+	}
 
 	return r
 }
