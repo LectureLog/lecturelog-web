@@ -51,7 +51,11 @@ GATE C0: миграции применяются; layout рендерится в
 | C0-config | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (gofmt) | ✅ в integration (bb819d3) | ✅ |
 | C0-db     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (go mod tidy) | ✅ в integration (00025c7) | ✅ |
 | C0-web    | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 круга (детерминизм templ; чистка config+focus) | ✅ в integration (08cdb4c) | ✅ |
-| C0-auth   | — | — | — | — | — | — | — | — |
+| C0-auth   | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE (security-разбор, дыр нет) | ✅ 1 круг (финал app.css + gofmt) | ✅ в integration (ce3e498) | ⏳ DOCS НЕ сделан (лимит) |
+
+## ВОЛНА C0 ЗАВЕРШЕНА (все 4 атома в integration, ce3e498). Ворота зелёные, дерево чисто.
+ОСТАЛОСЬ по C0 (для след. вызова): (1) DOCS C0-auth — README про internal/auth+cmd/server
+(НЕ сделан из-за лимитов); (2) КОНЕЦ ВОЛНЫ: push integration на origin + PR (политика владельца).
 
 ## ИЗМЕНЕНИЕ MERGE-ПОЛИТИКИ (решение владельца 2026-06-23)
 Атомы C0 **мержатся в локальную integration сразу** (--no-ff, без PR на каждый).
@@ -135,7 +139,38 @@ Downloads/«Сбор нового проекта»):
 4. **Tailwind purge**: добавлен `@source "../"` — при C1 (utility-классы в .templ) проверить,
    что нужные классы не вырезаются и попадают в app.css.
 
-## СЛЕДУЮЩИЙ ШАГ: C0-auth (ПОСЛЕДНИЙ атом C0, блокер защищённых роутов)
+## C0-auth — итог атома (смержен в integration ce3e498)
+- `internal/auth`: Google OAuth 2.0 (golang.org/x/oauth2; state безусловно, crypto/rand,
+  constant-time сверка; профиль через userinfo endpoint, НЕ id_token). Сессии Postgres
+  (кука ll_session HttpOnly+Secure(флаг)+SameSite=Lax, TTL из config.SessionTTL; state-кука
+  ll_oauth_state 600с). Логика входа email=личность (login.go resolveUser: email_verified
+  guard ПЕРВЫМ — анти-takeover, ничего не создаём при false; матч users.email; найден→
+  UpsertIdentity, нет→CreateUser+UpsertIdentity). gorilla/csrf на мутациях (X-CSRF-Token под
+  htmx hx-headers). Middleware: LoadSession (кладёт user, не режет) + RequireAuth (аноним→302
+  /auth/login, 401 при HX-Request). Интерфейсы Repository/OAuthProvider — мокабельность.
+- data-access в `internal/db/{users.go,sessions.go}` (СВОИ типы db.UserRow/SessionRow, db НЕ
+  импортирует auth; GetSession фильтрует expires_at>now()). Адаптер dbAdapter (auth.Repository)
+  — в cmd/server. `cmd/server/main.go`: config.Load→db.New/Migrate→auth.Service→web.NewRouter
+  (opts)→ListenAndServe; CSRF-ключ crypto/rand на старте (РЕШЕНИЕ ОРКЕСТРАТОРА: НЕ env, config
+  не тронут; долг — вынести в env для прод-стабильности). web.NewRouter(opts ...Option)
+  (WithGlobalMiddleware/WithMount; web НЕ зависит от auth; старые тесты не сломаны).
+- Env для запуска cmd/server (помимо C0-config обязательных): PLATFORM_SECURE="true" в проде
+  (дефолт false для локального http). GOOGLE_CLIENT_*/PLATFORM_CALLBACK_URL — из config.
+- Дефолтные тесты без сети/Postgres (OAuth httptest, resolveUser на моке). Интеграционные db
+  (users/sessions) за тегом integration (testcontainers, реально прошли 24.7с).
+- ACCEPT COMPLETE (security по коду+тестам), REVIEW APPROVE (дыр нет). 1 LOOP: финальный
+  app.css (Tailwind purge дрейфил — закоммичен в финале) + gofmt (e545b72, 4e8a31c). 13 пофазных коммитов.
+
+## ДОЛГИ из REVIEW C0-auth (НЕ блокеры — для C1/будущих волн)
+1. oauth.go: двойная установка Authorization (ручной хедер + cfg.Client инжектит) — избыточно, убрать.
+2. handlers.go: пустой code при валидном state → 500 вместо 400 (безопасно, но семантика).
+3. Канонизация email отсутствует (Google отдаёт lowercase — риск ~0; долг для мульти-провайдера).
+4. db/users_test.go: мёртвый setupTestDB (дубль). oauth_test.go: самописные containsParam/contains — заменить на strings.Contains.
+5. CSRF-403 не покрыт httptest (gorilla/csrf требует спец-инициализации) — план допускал ручную проверку; долг на e2e C1.
+6. access_type=offline запрашивает refresh_token, который не используется — можно убрать.
+7. Нет фоновой чистки протухших сессий (idx_sessions_expires_at заложен) — cron будущей волны.
+
+## ИСТОРИЧЕСКИЙ СЛЕДУЮЩИЙ ШАГ (выполнен): C0-auth (ПОСЛЕДНИЙ атом C0, блокер защищённых роутов)
 Зависит от db (users/identities/sessions) + config (OAuth-секреты, PLATFORM_CALLBACK_URL) +
 web (layout для страниц входа/ошибок, hx-headers-хук под CSRF уже заложен в layout).
 - Google OAuth-флоу (state БЕЗУСЛОВНО, §4). Сессии в Postgres (кука httponly/secure/SameSite=Lax).
