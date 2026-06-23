@@ -72,6 +72,48 @@ OpenAPI-контракта ядра.
 > HTTP-приём вебхука (endpoint, чтение тела, матч лекции по `core_task_id`) — вне
 > B1; это задача C1-sync. B1 даёт только чистый верификатор и тип тела.
 
+## Пакет `internal/db`
+
+Общий слой подключения к Postgres платформы и применения миграций схемы.
+
+**Подключение.** Точка входа — `db.New(ctx, dsn) (*pgxpool.Pool, error)`: создаёт
+`pgxpool`, проверяет доступность базы через `Ping`, возвращает пул готовым к
+использованию. DSN передаётся строкой (из `config.Config.PlatformDBDSN`); пакет
+`db` не импортирует `internal/config`.
+
+**Миграции.** Движок — `jackc/tern/v2` (pgx-родной, без сторонних CLI-зависимостей).
+Файлы `*.sql` встроены в бинарь через `//go:embed migrations/*.sql`. Применение:
+
+```go
+db.Migrate(ctx, pool) error
+```
+
+Вызов идемпотентен: повторный запуск при уже применённых миграциях ничего не меняет.
+Таблица версий (`schema_version`) управляется tern автоматически.
+
+**Схема (таблицы):**
+
+| Таблица | Роль |
+|---|---|
+| `users` | Пользователи платформы; `email` UNIQUE NOT NULL; PK — UUID |
+| `identities` | OAuth-аккаунты; составной PK `(provider, provider_sub)`, FK→`users`; email не хранится |
+| `sessions` | Сессии; `session_id` UUID PK, FK→`users`, `expires_at` |
+| `lectures` | Лекции; статус/видимость/тип источника — нативные PostgreSQL enum; поля `core_task_id`, `s3_key`, `video_url`, `published_at` и др. |
+
+UUID генерится базой (`gen_random_uuid()`, расширение `pgcrypto`).
+
+Частичный индекс `idx_lectures_core_task_id` на `lectures.core_task_id` (WHERE NOT
+NULL) — обеспечивает быстрый матч входящего вебхука по идентификатору задачи ядра.
+
+**Тесты.** Дефолтный `go test ./...` не требует Postgres: проверяет встроенность
+embed-файлов, синтаксическую корректность SQL и отказ `New` на заведомо битом DSN.
+Интеграционный тест (тег `integration`) поднимает Postgres через `testcontainers`,
+применяет миграции и проверяет идемпотентность. Команда:
+
+```bash
+make migrate-test   # go test -tags=integration ./internal/db/...  (требует Docker)
+```
+
 ## Пакет `internal/config`
 
 Единая точка чтения и валидации конфигурации приложения из окружения. Пакет
@@ -160,6 +202,7 @@ make sync-spec   # cp ../lecturelog-core/docs/openapi.json -> internal/coreclien
 | `make test` | `go test ./...` (юнит + контрактный smoke к замоканному ядру) |
 | `make gate` | ворота GATE B: `generate` + build + vet + test |
 | `make sync-spec` | обновить вендоренную спеку из репозитория ядра |
+| `make migrate-test` | интеграционная проверка миграций (требует Docker) |
 
 Ворота GATE B (слой 1 приёмки платформы):
 
@@ -172,13 +215,20 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
 пути, методы, Content-Type, сериализацию тел и маппинг кодов (200/204/400/404/409)
 в доменные ошибки — герметично, без сети и соседнего репозитория.
 
+Дефолтные ворота (`make gate`) не требуют ни Docker, ни Postgres — все
+интеграционные тесты изолированы тегом `integration` и запускаются только через
+`make migrate-test`.
+
 ## Статус
 
 - **B1** — `internal/coreclient`: типизированный клиент ядра, HMAC-верификатор
   вебхука, GATE B зелёный.
 - **C0-config** — `internal/config`: единый конфиг-слой, fail-fast агрегация
   ошибок окружения, валидация `LECTURELOG_WEBHOOK_SECRET` (долг B1 закрыт).
+- **C0-db** — `internal/db`: схема и миграции Postgres платформы (tern + embed),
+  таблицы users/identities/sessions/lectures, GATE B зелёный, интеграционный тест
+  за `integration`-тегом.
 
-Впереди — оставшиеся атомы C0 (db, web-каркас, auth) и волна C1 (доменные
-модули: upload, lecture, hub, reader, sync). Подробности — в `docs/WORKFLOW.md`
+Впереди — C0-web (каркас «Читальный зал»), C0-auth и волна C1 (доменные модули:
+upload, lecture, hub, reader, sync). Подробности — в `docs/WORKFLOW.md`
 и `docs/TASKS.md`.
