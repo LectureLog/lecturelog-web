@@ -32,6 +32,9 @@ func (m *mockRepository) FindUserByEmail(_ context.Context, _ string) (*User, er
 	m.findCalled++
 	return m.findUserResult, m.findUserErr
 }
+func (m *mockRepository) FindUserByID(_ context.Context, _ string) (*User, error) {
+	return m.findUserResult, m.findUserErr
+}
 func (m *mockRepository) CreateUser(_ context.Context, _ Profile) (*User, error) {
 	m.createCalled++
 	return m.createUserResult, m.createUserErr

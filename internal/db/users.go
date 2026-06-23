@@ -47,6 +47,25 @@ func (db *UserDB) FindUserByEmail(ctx context.Context, email string) (*UserRow, 
 	return row, nil
 }
 
+// FindUserByID ищет пользователя по UUID.
+// Возвращает (nil, nil) если пользователь не найден.
+func (db *UserDB) FindUserByID(ctx context.Context, userID string) (*UserRow, error) {
+	const q = `
+		SELECT user_id, email, COALESCE(name, ''), COALESCE(avatar_url, '')
+		FROM users
+		WHERE user_id = $1
+	`
+	row := &UserRow{}
+	err := db.Pool.QueryRow(ctx, q, userID).Scan(&row.UserID, &row.Email, &row.Name, &row.AvatarURL)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("db: FindUserByID: %w", err)
+	}
+	return row, nil
+}
+
 // CreateUser создаёт нового пользователя и возвращает созданную строку.
 // UUID генерируется Postgres через gen_random_uuid().
 func (db *UserDB) CreateUser(ctx context.Context, email, name, avatarURL string) (*UserRow, error) {

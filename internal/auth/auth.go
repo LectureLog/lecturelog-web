@@ -60,6 +60,10 @@ type Repository interface {
 	// Возвращает (nil, nil) если пользователь не найден.
 	FindUserByEmail(ctx context.Context, email string) (*User, error)
 
+	// FindUserByID ищет пользователя по UUID.
+	// Возвращает (nil, nil) если пользователь не найден.
+	FindUserByID(ctx context.Context, userID string) (*User, error)
+
 	// CreateUser создаёт нового пользователя из профиля OAuth.
 	CreateUser(ctx context.Context, p Profile) (*User, error)
 
