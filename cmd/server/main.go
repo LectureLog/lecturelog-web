@@ -200,4 +200,3 @@ func envOr(key, def string) string {
 
 // _ — проверка на этапе компиляции: dbAdapter реализует auth.Repository.
 var _ auth.Repository = (*dbAdapter)(nil)
-

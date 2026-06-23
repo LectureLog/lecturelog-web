@@ -11,15 +11,15 @@ import (
 // Не требует Postgres или сети.
 type mockRepository struct {
 	// Результаты вызовов
-	findUserResult *User
-	findUserErr    error
+	findUserResult   *User
+	findUserErr      error
 	createUserResult *User
-	createUserErr  error
-	upsertErr      error
+	createUserErr    error
+	upsertErr        error
 	createSessResult *Session
-	createSessErr  error
+	createSessErr    error
 	getSessionResult *Session
-	getSessionErr  error
+	getSessionErr    error
 	deleteSessionErr error
 
 	// Счётчики вызовов для проверки инвариантов
