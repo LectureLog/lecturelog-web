@@ -210,4 +210,289 @@
     line-height: 1.78;
     color: var(--text-2);
   }
+
+  /* ─── Компоненты страницы лекций ─────────────────────────────────────────── */
+
+  /* Секция «Мои лекции» */
+  .ll-lectures-section {
+    width: 100%;
+  }
+
+  /* Адаптивная сетка карточек (auto-fill, min 252px) */
+  .ll-lec-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(252px, 1fr));
+    gap: 16px;
+  }
+
+  /* Карточка лекции: поверхность, граница, скругление */
+  .ll-lec-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: border-color 0.16s, box-shadow 0.16s, transform 0.16s;
+  }
+
+  .ll-lec-card:hover {
+    border-color: var(--accent);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+  }
+
+  /* Верхняя часть карточки: бейдж источника + действия */
+  .ll-lec-card-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  /* Действия в верхней части карточки */
+  .ll-lec-card-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  /* Тело карточки */
+  .ll-lec-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+  }
+
+  /* Подвал карточки: мета + тумблер */
+  .ll-lec-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-top: auto;
+  }
+
+  /* Бейдж: пилюля (accent-soft для активных, muted для нейтральных) */
+  .ll-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: var(--r-pill);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .ll-badge--muted {
+    background: var(--surface-2);
+    color: var(--text-2);
+  }
+
+  /* Статусы лекции */
+  .ll-status {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 500;
+  }
+
+  .ll-status--processing {
+    color: var(--text-2);
+    /* Пульсирующий индикатор без спиннера */
+    animation: ll-pulse 1.8s ease-in-out infinite;
+  }
+
+  @keyframes ll-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  .ll-status--ready {
+    color: var(--accent);
+    background: var(--accent-soft);
+    padding: 2px 6px;
+    border-radius: var(--r-pill);
+    display: inline-block;
+  }
+
+  .ll-status--failed {
+    color: var(--text-3);
+  }
+
+  /* Текст ошибки */
+  .ll-lec-error {
+    font-family: var(--font-sans);
+    font-size: 12px;
+    color: var(--text-3);
+    line-height: 1.4;
+  }
+
+  /* Заголовок лекции (serif, inline-форма) */
+  .ll-lec-title {
+    font-family: var(--font-serif);
+    font-size: 16.5px;
+    font-weight: 600;
+    color: var(--ink);
+    border: none;
+    outline: none;
+    background: transparent;
+    width: 100%;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.35;
+    padding: 0;
+    resize: none;
+  }
+
+  .ll-lec-title:focus {
+    outline: 1px solid var(--border-2);
+    border-radius: 3px;
+    -webkit-line-clamp: unset;
+  }
+
+  /* Форма inline-переименования */
+  .ll-lec-title-form {
+    display: flex;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  /* Кнопка сохранения заголовка (только при фокусе) */
+  .ll-lec-rename-btn {
+    width: 28px;
+    height: 28px;
+    flex: none;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    border-radius: 6px;
+    color: var(--text-2);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.12s;
+  }
+
+  .ll-lec-title-form:focus-within .ll-lec-rename-btn {
+    opacity: 1;
+  }
+
+  .ll-lec-rename-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* Мета-информация карточки (дата, tabular-nums) */
+  .ll-lec-meta {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Тумблер видимости */
+  .ll-toggle {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: var(--r-pill);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-family: var(--font-sans);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: 0.16s;
+    min-height: 26px;
+  }
+
+  .ll-toggle:hover:not(:disabled) {
+    background: var(--surface);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .ll-toggle:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .ll-toggle--public {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  /* Пустое состояние */
+  .ll-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 80px 24px;
+    gap: 16px;
+  }
+
+  .ll-empty-icon {
+    width: 48px;
+    height: 48px;
+    color: var(--text-3);
+  }
+
+  .ll-empty-icon svg {
+    width: 48px;
+    height: 48px;
+  }
+
+  .ll-empty-title {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .ll-empty-text {
+    font-family: var(--font-sans);
+    font-size: 15px;
+    color: var(--text-2);
+    max-width: 360px;
+    line-height: 1.6;
+    margin: 0;
+  }
+
+  /* Кнопки */
+  .ll-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 9px 20px;
+    border-radius: var(--r-btn);
+    border: 1px solid transparent;
+    font-family: var(--font-sans);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: 0.16s;
+    min-height: 40px;
+  }
+
+  .ll-btn--accent {
+    background: var(--accent);
+    color: var(--bg);
+  }
+
+  .ll-btn--accent:hover {
+    background: var(--accent-2);
+  }
 }

@@ -1,0 +1,215 @@
+package web
+
+// LectureCardVM — view-модель одной карточки лекции для шаблонов.
+// Маппинг lecture.Lecture → LectureCardVM выполняет lecture/handlers.go.
+type LectureCardVM struct {
+	// ID — UUID лекции.
+	ID string
+	// Title — заголовок лекции.
+	Title string
+	// Status — строковый статус: processing|ready|failed.
+	Status string
+	// StatusLabel — локализованная метка статуса: «Обработка»/«Готово»/«Ошибка».
+	StatusLabel string
+	// Visibility — видимость: private|public.
+	Visibility string
+	// SourceKind — тип источника: audio|video|video_url.
+	SourceKind string
+	// CanPublish — статус ready → тумблер публикации активен.
+	CanPublish bool
+	// CanRetry — статус failed + есть источник → кнопка повтора активна.
+	CanRetry bool
+	// ErrorText — текст ошибки (маппинг error_code в сообщение).
+	ErrorText string
+	// UpdatedAt — отформатированная дата обновления для tabular-nums.
+	UpdatedAt string
+}
+
+// LecturesPage — страница «Мои лекции» в базовом Layout.
+// Показывает сетку карточек лекций или пустое состояние при отсутствии.
+templ LecturesPage(data LayoutData, vms []LectureCardVM) {
+	@Layout(data, nil) {
+		<section class="ll-lectures-section">
+			if len(vms) == 0 {
+				@LecturesEmpty()
+			} else {
+				<div class="ll-lec-grid">
+					for _, vm := range vms {
+						@LectureCard(vm)
+					}
+				</div>
+			}
+		</section>
+	}
+}
+
+// LectureCard — карточка одной лекции.
+// Используется как в полной странице, так и в частичных htmx-ответах.
+templ LectureCard(vm LectureCardVM) {
+	<article class="ll-lec-card" id={ "lec-" + vm.ID }>
+		<div class="ll-lec-card-top">
+			<span class={ "ll-badge", sourceBadgeClass(vm.SourceKind) }>{ sourceLabel(vm.SourceKind) }</span>
+			<div class="ll-lec-card-actions">
+				if vm.CanRetry {
+					<button
+						class="ll-icon-btn"
+						hx-post={ "/lectures/" + vm.ID + "/retry" }
+						hx-target={ "#lec-" + vm.ID }
+						hx-swap="outerHTML"
+						aria-label="Повторить обработку"
+					>
+						@iconRetry()
+					</button>
+				}
+				<button
+					class="ll-icon-btn"
+					hx-delete={ "/lectures/" + vm.ID }
+					hx-target={ "#lec-" + vm.ID }
+					hx-swap="outerHTML"
+					hx-confirm="Удалить лекцию?"
+					aria-label="Удалить лекцию"
+				>
+					@iconTrash()
+				</button>
+			</div>
+		</div>
+		<div class="ll-lec-card-body">
+			@LectureTitleInline(vm)
+			<div class={ "ll-status ll-status--" + vm.Status }>{ vm.StatusLabel }</div>
+			if vm.ErrorText != "" {
+				<p class="ll-lec-error">{ vm.ErrorText }</p>
+			}
+		</div>
+		<div class="ll-lec-card-footer">
+			<span class="ll-lec-meta">{ vm.UpdatedAt }</span>
+			if vm.CanPublish || vm.Visibility == "public" {
+				@LectureVisibilityToggle(vm)
+			}
+		</div>
+	</article>
+}
+
+// LectureTitleInline — inline-форма переименования заголовка лекции.
+// htmx: POST на /lectures/{id}/rename → частичный ответ с обновлённым заголовком.
+templ LectureTitleInline(vm LectureCardVM) {
+	<form
+		class="ll-lec-title-form"
+		hx-post={ "/lectures/" + vm.ID + "/rename" }
+		hx-target={ "#lec-" + vm.ID }
+		hx-swap="outerHTML"
+	>
+		<input
+			type="text"
+			name="title"
+			value={ vm.Title }
+			class="ll-lec-title"
+			aria-label="Заголовок лекции"
+			maxlength="200"
+		/>
+		<button type="submit" class="ll-lec-rename-btn" aria-label="Сохранить заголовок">
+			@iconCheck()
+		</button>
+	</form>
+}
+
+// LectureVisibilityToggle — тумблер переключения видимости лекции.
+// Для public-лекции disabled если статус не ready.
+templ LectureVisibilityToggle(vm LectureCardVM) {
+	<button
+		class={ "ll-toggle", visibilityToggleClass(vm) }
+		hx-post={ "/lectures/" + vm.ID + "/visibility" }
+		hx-target={ "#lec-" + vm.ID }
+		hx-swap="outerHTML"
+		disabled?={ !vm.CanPublish && vm.Visibility != "public" }
+		aria-label={ visibilityLabel(vm) }
+	>
+		{ visibilityText(vm) }
+	</button>
+}
+
+// LecturesEmpty — пустое состояние: нет ни одной лекции.
+// STYLE_GUIDE §7: центрированный блок с иконкой, подзаголовком и действием.
+templ LecturesEmpty() {
+	<div class="ll-empty">
+		<div class="ll-empty-icon">
+			@iconBook()
+		</div>
+		<h2 class="ll-empty-title">Пока нет ни одной лекции</h2>
+		<p class="ll-empty-text">Загрузите аудио или видео, чтобы получить конспект с тайм-кодами</p>
+		<a href="/upload" class="ll-btn ll-btn--accent">Загрузить лекцию</a>
+	</div>
+}
+
+// ─── Вспомогательные чистые функции (не templ) ───────────────────────────────
+
+// sourceBadgeClass возвращает CSS-класс бейджа источника.
+func sourceBadgeClass(sourceKind string) string {
+	if sourceKind == "audio" {
+		return "ll-badge--muted"
+	}
+	return "ll-badge--muted"
+}
+
+// sourceLabel возвращает локализованный лейбл типа источника.
+func sourceLabel(sourceKind string) string {
+	switch sourceKind {
+	case "audio":
+		return "Аудио"
+	case "video":
+		return "Видео"
+	case "video_url":
+		return "Ссылка"
+	default:
+		return sourceKind
+	}
+}
+
+// visibilityToggleClass возвращает CSS-класс тумблера в зависимости от видимости.
+func visibilityToggleClass(vm LectureCardVM) string {
+	if vm.Visibility == "public" {
+		return "ll-toggle--public"
+	}
+	return "ll-toggle--private"
+}
+
+// visibilityLabel возвращает aria-label для тумблера видимости.
+func visibilityLabel(vm LectureCardVM) string {
+	if vm.Visibility == "public" {
+		return "Снять с публикации"
+	}
+	return "Опубликовать"
+}
+
+// visibilityText возвращает текстовую метку тумблера.
+func visibilityText(vm LectureCardVM) string {
+	if vm.Visibility == "public" {
+		return "Публичная"
+	}
+	return "Личная"
+}
+
+// iconRetry — иконка повтора (стрелка по кругу).
+templ iconRetry() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M1 4v6h6"></path>
+		<path d="M3.51 15a9 9 0 1 0 .49-4.5"></path>
+	</svg>
+}
+
+// iconTrash — иконка удаления (мусорная корзина).
+templ iconTrash() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<polyline points="3,6 5,6 21,6"></polyline>
+		<path d="M19,6l-1,14a2,2,0,0,1-2,2H8a2,2,0,0,1-2-2L5,6"></path>
+		<path d="M10,11v6"></path>
+		<path d="M14,11v6"></path>
+		<path d="M9,6V4a1,1,0,0,1,1-1h4a1,1,0,0,1,1,1v2"></path>
+	</svg>
+}
+
+// iconCheck — иконка подтверждения (галочка).
+templ iconCheck() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<polyline points="20,6 9,17 4,12"></polyline>
+	</svg>
+}
