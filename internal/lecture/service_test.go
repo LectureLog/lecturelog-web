@@ -216,6 +216,31 @@ func TestService_SetVisibility_PublicOnProcessing(t *testing.T) {
 	}
 }
 
+// TestService_SetVisibility_PublicNotOwner проверяет, что попытка опубликовать
+// ЧУЖУЮ не-ready лекцию не раскрывает её существование/статус: должна вернуться
+// ErrNotFound (404), а не ErrNotReady (409). Иначе посторонний по перебору ID
+// мог бы отличить «чужая не-ready лекция существует» от «не существует».
+func TestService_SetVisibility_PublicNotOwner(t *testing.T) {
+	foreignLecture := &lecture.Lecture{
+		ID: "lec-1", OwnerID: "other-user",
+		Status:     lecture.StatusProcessing,
+		Visibility: lecture.VisibilityPrivate,
+	}
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil // affected=0 — owner_id в WHERE не совпал (чужая)
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return foreignLecture, nil // лекция существует, но принадлежит другому
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityPublic)
+	if err != lecture.ErrNotFound {
+		t.Errorf("ошибка = %v, ожидается ErrNotFound (не раскрывать чужую лекцию)", err)
+	}
+}
+
 // TestService_SetVisibility_Private проверяет снятие с публикации.
 func TestService_SetVisibility_Private(t *testing.T) {
 	repo := &mockRepo{

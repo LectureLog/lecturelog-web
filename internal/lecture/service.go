@@ -72,10 +72,15 @@ func (s *Service) SetVisibility(ctx context.Context, lectureID, ownerID string, 
 			if existing == nil {
 				return Lecture{}, ErrNotFound
 			}
+			// Проверка владельца ДО раскрытия статуса: чужую лекцию не отличить
+			// от несуществующей (анти-перебор ID — как в Delete/Retry).
+			if existing.OwnerID != ownerID {
+				return Lecture{}, ErrNotFound
+			}
 			if existing.Status != StatusReady {
 				return Lecture{}, ErrNotReady
 			}
-			// Если лекция ready но affected=0 — скорее всего чужая (owner_id в WHERE)
+			// Лекция своя и ready, но affected=0 — недостижимая ветка (defensive).
 			return Lecture{}, ErrNotFound
 		}
 		// private: affected=0 → не найдена или не его
