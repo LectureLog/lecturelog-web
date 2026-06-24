@@ -87,6 +87,61 @@ func createTestLecture(t *testing.T, ctx context.Context, lectureDB *LectureDB, 
 	return row
 }
 
+// TestCreateLecture_WithCoreTaskID проверяет создание лекции с уже известной задачей ядра
+// и однородную nullable-семантику: пустая строка превращается в SQL NULL.
+func TestCreateLecture_WithCoreTaskID(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "create-core-task@example.com")
+
+	withTask, err := lectureDB.CreateLecture(ctx, CreateLectureParams{
+		OwnerID:    user.UserID,
+		Title:      "Лекция с задачей",
+		SourceKind: "audio",
+		CoreTaskID: "task-create-123",
+		S3Key:      "test/with-task.mp3",
+	})
+	if err != nil {
+		t.Fatalf("CreateLecture с CoreTaskID: %v", err)
+	}
+	foundWithTask, err := lectureDB.FindByID(ctx, withTask.LectureID)
+	if err != nil {
+		t.Fatalf("FindByID с CoreTaskID: %v", err)
+	}
+	if foundWithTask.CoreTaskID != "task-create-123" {
+		t.Errorf("CoreTaskID = %q, ожидается task-create-123", foundWithTask.CoreTaskID)
+	}
+
+	withoutTask, err := lectureDB.CreateLecture(ctx, CreateLectureParams{
+		OwnerID:    user.UserID,
+		Title:      "Лекция без задачи",
+		SourceKind: "audio",
+		CoreTaskID: "",
+		S3Key:      "test/without-task.mp3",
+	})
+	if err != nil {
+		t.Fatalf("CreateLecture с пустым CoreTaskID: %v", err)
+	}
+	foundWithoutTask, err := lectureDB.FindByID(ctx, withoutTask.LectureID)
+	if err != nil {
+		t.Fatalf("FindByID с пустым CoreTaskID: %v", err)
+	}
+	if foundWithoutTask.CoreTaskID != "" {
+		t.Errorf("CoreTaskID для SQL NULL = %q, ожидается пустая строка", foundWithoutTask.CoreTaskID)
+	}
+
+	var isNull bool
+	if err := lectureDB.Pool.QueryRow(ctx,
+		"SELECT core_task_id IS NULL FROM lectures WHERE lecture_id=$1",
+		withoutTask.LectureID,
+	).Scan(&isNull); err != nil {
+		t.Fatalf("проверка SQL NULL core_task_id: %v", err)
+	}
+	if !isNull {
+		t.Error("пустой CoreTaskID должен сохраняться как SQL NULL")
+	}
+}
+
 // setReadyStatus — вспомогательная: устанавливает статус ready для лекции.
 func setReadyStatus(t *testing.T, ctx context.Context, pool *pgxpool.Pool, lectureID string) {
 	t.Helper()

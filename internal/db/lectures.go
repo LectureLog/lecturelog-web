@@ -57,6 +57,8 @@ type CreateLectureParams struct {
 	Title string
 	// SourceKind — тип источника: audio|video|video_url.
 	SourceKind string
+	// CoreTaskID — задача ядра; пустая строка сохраняется как SQL NULL.
+	CoreTaskID string
 	// S3Key — ключ в объектном хранилище; может быть пустым для video_url.
 	S3Key string
 	// VideoURL — URL видео; может быть пустым для файловых источников.
@@ -110,12 +112,12 @@ const lectureSelectCols = `
 // Используется внутренне и в тест-хелперах; в боевом коде — через доменный слой C1-upload.
 func (db *LectureDB) CreateLecture(ctx context.Context, p CreateLectureParams) (*LectureRow, error) {
 	const q = `
-        INSERT INTO lectures (owner_id, title, source_kind, s3_key, video_url)
-        VALUES ($1, $2, $3::lecture_source_kind, NULLIF($4,''), NULLIF($5,''))
+        INSERT INTO lectures (owner_id, title, source_kind, core_task_id, s3_key, video_url)
+        VALUES ($1, $2, $3::lecture_source_kind, NULLIF($4,''), NULLIF($5,''), NULLIF($6,''))
         RETURNING ` + lectureSelectCols
 
 	row, err := scanLectureRow(db.Pool.QueryRow(ctx, q,
-		p.OwnerID, p.Title, p.SourceKind, p.S3Key, p.VideoURL))
+		p.OwnerID, p.Title, p.SourceKind, p.CoreTaskID, p.S3Key, p.VideoURL))
 	if err != nil {
 		return nil, fmt.Errorf("db: CreateLecture: %w", err)
 	}

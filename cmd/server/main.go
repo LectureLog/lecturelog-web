@@ -6,7 +6,6 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +17,7 @@ import (
 
 	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/LectureLog/lecturelog-web/internal/config"
+	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/db"
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
 	"github.com/LectureLog/lecturelog-web/internal/web"
@@ -122,6 +122,11 @@ func main() {
 		log.Fatalf("config.Load: %v", err)
 	}
 
+	core, err := coreclient.New(cfg.CoreClient())
+	if err != nil {
+		log.Fatalf("coreclient.New: %v", err)
+	}
+
 	// Подключаемся к Postgres и применяем миграции
 	pool, err := db.New(ctx, cfg.PlatformDBDSN)
 	if err != nil {
@@ -158,11 +163,10 @@ func main() {
 	// Создаём auth.Service
 	authSvc := auth.NewService(repo, provider, cfg.SessionTTL, secureCookies)
 
-	// Инициализируем lecture.Service с адаптером БД и заглушкой ядра (noopCoreTasks).
-	// Долг C1: noopCoreTasks заменить на coreTasksAdapter поверх coreclient.CoreClient.
+	// Инициализируем lecture.Service с адаптерами БД и ядра.
 	lectureSvc := lecture.NewService(
 		&lectureRepo{lectures: &db.LectureDB{Pool: pool}},
-		noopCoreTasks{},
+		&coreTasksAdapter{core: core},
 	)
 
 	// CSRF-ключ генерируется на старте (32 случайных байта).
@@ -293,31 +297,30 @@ func rowToLecture(row db.LectureRow) lecture.Lecture {
 	}
 }
 
-// ─── noopCoreTasks — заглушка ядра до C1-upload/C1-sync ─────────────────────
+// ─── Адаптер для lecture.CoreTasks ──────────────────────────────────────────
 
-// noopCoreTasks — заглушка lecture.CoreTasks.
-// Удаление работает без ядра (строка уходит — наблюдаемо).
-// Retry возвращает "недоступно" — честное поведение до проводки coreclient.
-// Полная реализация через coreTasksAdapter — долг атома C1.
-type noopCoreTasks struct{}
-
-func (noopCoreTasks) DeleteTask(_ context.Context, _ string) error {
-	// Удаление: noopCoreTasks ничего не делает в ядре — допустимо для демонстрации.
-	// Долг C1: заменить на coreclient.DeleteTask.
-	return nil
+// coreTasksAdapter реализует lecture.CoreTasks поверх coreclient.CoreClient.
+type coreTasksAdapter struct {
+	core *coreclient.CoreClient
 }
 
-func (noopCoreTasks) CreateTask(_ context.Context, _ lecture.CreateTaskParams) (string, error) {
-	// Retry: честно сообщаем что обработка временно недоступна.
-	// Долг C1: заменить на coreclient.CreateTask через coreTasksAdapter.
-	return "", errors.New("обработка временно недоступна")
+func (a *coreTasksAdapter) DeleteTask(ctx context.Context, coreTaskID string) error {
+	return a.core.DeleteTask(ctx, coreTaskID)
+}
+
+func (a *coreTasksAdapter) CreateTask(ctx context.Context, p lecture.CreateTaskParams) (string, error) {
+	return a.core.CreateTask(ctx, coreclient.CreateTaskParams{
+		S3Key:    p.S3Key,
+		VideoURL: p.VideoURL,
+		Media:    p.Media,
+	})
 }
 
 // _ — проверка на этапе компиляции: lectureRepo реализует lecture.Repository.
 var _ lecture.Repository = (*lectureRepo)(nil)
 
-// _ — проверка на этапе компиляции: noopCoreTasks реализует lecture.CoreTasks.
-var _ lecture.CoreTasks = noopCoreTasks{}
+// _ — проверка на этапе компиляции: coreTasksAdapter реализует lecture.CoreTasks.
+var _ lecture.CoreTasks = (*coreTasksAdapter)(nil)
 
 // _ — проверка на этапе компиляции: dbAdapter реализует auth.Repository.
 var _ auth.Repository = (*dbAdapter)(nil)
