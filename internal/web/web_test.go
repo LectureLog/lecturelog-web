@@ -245,3 +245,150 @@ func TestRouter_ExistingRoutesUnchanged(t *testing.T) {
 		t.Errorf("GET /static/css/app.css с опциями = %d, ожидается 200", rec2.Code)
 	}
 }
+
+// ─── Тесты CSRF в layout ─────────────────────────────────────────────────────
+
+// TestLayout_CSRFHeader_Empty проверяет, что пустой токен даёт hx-headers="{}".
+// Обратная совместимость: существующие тесты используют пустую LayoutData.
+func TestLayout_CSRFHeader_Empty(t *testing.T) {
+	html := renderLayout(t, "Тест")
+
+	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами)
+	if !strings.Contains(html, `hx-headers="{}"`) {
+		t.Error("пустой CSRF-токен: ожидается hx-headers=\"{}\"")
+	}
+}
+
+// TestLayout_CSRFHeader_WithToken проверяет, что непустой токен попадает в hx-headers.
+func TestLayout_CSRFHeader_WithToken(t *testing.T) {
+	var b bytes.Buffer
+	data := web.LayoutData{Title: "Тест", CSRFToken: "test-csrf-token-123"}
+	err := web.Layout(data, nil).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("Layout.Render с CSRF-токеном: %v", err)
+	}
+	html := b.String()
+
+	// Токен должен появиться в hx-headers
+	if !strings.Contains(html, "test-csrf-token-123") {
+		t.Error("CSRF-токен не попал в hx-headers")
+	}
+	if !strings.Contains(html, "X-CSRF-Token") {
+		t.Error("ожидается заголовок X-CSRF-Token в hx-headers")
+	}
+}
+
+// ─── Тесты страницы лекций ────────────────────────────────────────────────────
+
+// renderLecturesPage — вспомогательная функция: рендерит LecturesPage в строку.
+func renderLecturesPage(t *testing.T, vms []web.LectureCardVM) string {
+	t.Helper()
+	var b bytes.Buffer
+	data := web.LayoutData{Title: "Мои лекции"}
+	err := web.LecturesPage(data, vms).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("LecturesPage.Render: %v", err)
+	}
+	return b.String()
+}
+
+// renderLectureCard — вспомогательная функция: рендерит LectureCard в строку.
+func renderLectureCard(t *testing.T, vm web.LectureCardVM) string {
+	t.Helper()
+	var b bytes.Buffer
+	err := web.LectureCard(vm).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("LectureCard.Render: %v", err)
+	}
+	return b.String()
+}
+
+// TestLecturesPage_Empty проверяет пустое состояние страницы лекций.
+func TestLecturesPage_Empty(t *testing.T) {
+	html := renderLecturesPage(t, nil)
+
+	// Пустое состояние должно содержать заголовок и подсказку
+	if !strings.Contains(html, "ll-empty") {
+		t.Error("пустое состояние: ожидается класс ll-empty")
+	}
+	// Должна быть ссылка на будущий /upload
+	if !strings.Contains(html, "/upload") {
+		t.Error("пустое состояние: ожидается ссылка на /upload")
+	}
+}
+
+// TestLecturesPage_WithCards проверяет, что страница рендерит карточки.
+func TestLecturesPage_WithCards(t *testing.T) {
+	vms := []web.LectureCardVM{
+		{
+			ID:          "lec-1",
+			Title:       "Алгебра",
+			Status:      "ready",
+			StatusLabel: "Готово",
+			Visibility:  "private",
+			SourceKind:  "audio",
+			CanPublish:  true,
+			UpdatedAt:   "24 июня 2026",
+		},
+	}
+	html := renderLecturesPage(t, vms)
+
+	if !strings.Contains(html, "Алгебра") {
+		t.Error("ожидается заголовок лекции 'Алгебра'")
+	}
+	if !strings.Contains(html, "ll-lec-grid") {
+		t.Error("ожидается сетка карточек ll-lec-grid")
+	}
+}
+
+// TestLectureCard_Status проверяет бейдж статуса и tabular-nums на мете.
+func TestLectureCard_Status(t *testing.T) {
+	vm := web.LectureCardVM{
+		ID:          "lec-1",
+		Title:       "Физика квантовая",
+		Status:      "processing",
+		StatusLabel: "Обработка",
+		Visibility:  "private",
+		SourceKind:  "video",
+		UpdatedAt:   "24 июн. 2026",
+	}
+	html := renderLectureCard(t, vm)
+
+	// Должен быть бейдж статуса
+	if !strings.Contains(html, "Обработка") {
+		t.Error("ожидается статус 'Обработка' в карточке")
+	}
+	// tabular-nums для дат/мета
+	if !strings.Contains(html, "ll-lec-meta") {
+		t.Error("ожидается класс ll-lec-meta для мета-информации (tabular-nums)")
+	}
+	// Заголовок через ll-lec-title
+	if !strings.Contains(html, "ll-lec-title") {
+		t.Error("ожидается класс ll-lec-title для заголовка лекции")
+	}
+}
+
+// TestLectureCard_Failed проверяет наличие кнопки retry для failed-лекции.
+func TestLectureCard_Failed(t *testing.T) {
+	vm := web.LectureCardVM{
+		ID:          "lec-2",
+		Title:       "Лекция с ошибкой",
+		Status:      "failed",
+		StatusLabel: "Ошибка",
+		Visibility:  "private",
+		SourceKind:  "audio",
+		CanRetry:    true,
+		ErrorText:   "Ошибка обработки",
+		UpdatedAt:   "24 июн. 2026",
+	}
+	html := renderLectureCard(t, vm)
+
+	// Кнопка retry для failed
+	if !strings.Contains(html, "/retry") {
+		t.Error("ожидается htmx-кнопка retry для failed-лекции")
+	}
+	// Текст ошибки
+	if !strings.Contains(html, "Ошибка обработки") {
+		t.Error("ожидается текст ошибки в карточке")
+	}
+}

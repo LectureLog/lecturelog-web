@@ -1,9 +1,25 @@
 package web
 
+import "fmt"
+
 // LayoutData — данные шапки и документа базового каркаса.
 type LayoutData struct {
 	// Title — заголовок вкладки браузера и название в шапке.
 	Title string
+	// CSRFToken — токен для htmx-мутаций (POST/DELETE через hx-headers).
+	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами).
+	// Заполняется в main через csrf-инжектор (§7 плана).
+	CSRFToken string
+}
+
+// csrfHeaders формирует JSON-строку для hx-headers.
+// Пустой токен → "{}" (обратная совместимость).
+// Непустой токен → {"X-CSRF-Token":"<token>"}.
+func csrfHeaders(token string) string {
+	if token == "" {
+		return "{}"
+	}
+	return fmt.Sprintf(`{"X-CSRF-Token":%q}`, token)
 }
 
 // Layout — базовый каркас «Читальный зал».
@@ -31,8 +47,8 @@ templ Layout(data LayoutData, actions templ.Component) {
 			<script src="/static/vendor/htmx.min.js" defer></script>
 			<title>{ data.Title }</title>
 		</head>
-		<!-- hx-headers — место под CSRF-токен, подставит C0-auth -->
-		<body hx-headers="{}">
+		<!-- hx-headers: пустой токен → {}; с токеном → {"X-CSRF-Token":"..."} -->
+		<body hx-headers={ csrfHeaders(data.CSRFToken) }>
 			@header(data, actions)
 			<main class="ll-main">
 				{ children... }
