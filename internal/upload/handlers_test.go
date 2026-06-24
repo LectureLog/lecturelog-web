@@ -159,6 +159,25 @@ func TestPresign_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestPresign_TrailingGarbage(t *testing.T) {
+	core := &mockCore{
+		createUploadFunc: func(context.Context, string) (coreclient.UploadResult, error) {
+			t.Fatal("CreateUpload called for invalid JSON")
+			return coreclient.UploadResult{}, nil
+		},
+	}
+	handler := mountTestRouter(newTestHTTPService(core, &mockRepo{}))
+
+	body := bytes.NewBufferString(`{"filename":"lecture.mp4","size":1024,"mime":"video/mp4"} garbage`)
+	req := addSessionCookie(httptest.NewRequest(http.MethodPost, "/upload/presign", body))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("POST /upload/presign trailing garbage = %d, want 400", rec.Code)
+	}
+}
+
 func TestConfirm_Success(t *testing.T) {
 	s3Key := "uploads/user-test-uuid/lecture.mp4"
 	signer := newTestServiceSigner()
