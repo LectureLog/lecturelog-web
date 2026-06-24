@@ -23,6 +23,7 @@ var (
 	ErrTooLarge         = errors.New("файл слишком большой")
 	ErrEmptyFilename    = errors.New("пустое имя файла")
 	ErrInvalidURL       = errors.New("некорректная ссылка")
+	ErrMediaMismatch    = errors.New("тип медиа не соответствует расширению файла")
 )
 
 func DetectMedia(filename string) (media string, ok bool) {
@@ -36,12 +37,17 @@ func DetectMedia(filename string) (media string, ok bool) {
 	}
 }
 
-func ValidateFileMeta(filename string, size int64) error {
+func ValidateFileMeta(filename, mime string, size int64) error {
 	if filename == "" {
 		return ErrEmptyFilename
 	}
-	if _, ok := DetectMedia(filename); !ok {
+	media, ok := DetectMedia(filename)
+	if !ok {
 		return ErrUnsupportedMedia
+	}
+	// MIME от клиента недоверенный, пустой MIME допускается: некоторые клиенты не шлют Content-Type.
+	if mime != "" && !strings.HasPrefix(mime, media+"/") {
+		return ErrMediaMismatch
 	}
 	if size <= 0 {
 		return ErrEmptyFile
