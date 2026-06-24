@@ -7,8 +7,19 @@
 > (gofmt, git, ворота) — сам.
 
 ## База волны
-- `integration` = `b452a96` (после C0 + атом C1-lecture + его docs). origin синхронен по C0
-  (2ef594f..0507824), НО C1-lecture ещё НЕ запушен (PR/push — в конце волны C1 по политике).
+- `integration` = `bbe2082` (после C0 + C1-lecture + C1-upload под-атомы 1-5). origin синхронен
+  по C0 (2ef594f..0507824), НО C1-lecture и C1-upload ещё НЕ запушены (PR/push — в конце волны C1).
+- Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt), worktree-ов нет. Безопасная граница паузы.
+
+## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (пауза 2026-06-24): C1-upload готов на 5/7 под-атомов
+C1-upload ДРОБЛЁН Plan-агентом на 7 под-атомов. Смержены 5, остались 2 (UI + mount).
+ПЕРВОЕ ДЕЙСТВИЕ нового чата: см. раздел «C1-upload — разбивка и остаток» ниже, начни с под-атома
+**C1-upload-mount** (РЕКОМЕНДАЦИЯ оркестратора: он закрывает BLOCKER «routes не подключены»,
+легче UI, без templ-граблей; даёт рабочее upload API в сервере). UI (templ-форма) — после него
+ИЛИ параллельно (UI не зависит от mount, но mount монтирует и GET /upload-страницу из UI —
+если UI ещё нет, mount монтирует только API presign/confirm/youtube, страницу добавит UI-mount).
+Владелец на вопрос порядка (mount-первым / UI-первым / оба / пауза) НЕ ответил — пауза по лимиту;
+порядок выбирает новый оркестратор (рекомендация — mount первым).
 
 ## Порядок задач C1 (РЕШЕНО оркестратором)
 Заявлено «5 ∥-задач», но реальные зависимости делают их НЕ полностью параллельными:
@@ -31,10 +42,38 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
 | Задача | PLAN | ISOLATE | BUILD | ACCEPT | REVIEW | LOOP | MERGE | DOCS |
 |---|---|---|---|---|---|---|---|---|
 | C1-lecture | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 фикса (security) | ✅ в integration (48f55b3) | ✅ (b452a96) |
-| C1-upload  | ⏳ | | | | | | | |
+| C1-upload  | ✅ | ✅ | 🟡 5/7 | 🟡 5/7 | 🟡 5/7 | ✅ по мере | 🟡 5/7 в integration | ⏳ (в конце атома) |
 | C1-sync    | ⏳ | | | | | | | |
 | C1-hub     | ⏳ | | | | | | | |
 | C1-reader  | ⏳ | | | | | | | |
+
+### C1-upload — разбивка на 7 под-атомов (5 смержено, 2 осталось)
+| # | под-атом | что | статус |
+|---|---|---|---|
+| 1 | upload-wiring | реальный coreclient в main + coreTasksAdapter (замена noopCoreTasks) + db.CreateLecture(+CoreTaskID) | ✅ merge 775b160 |
+| 2 | upload-validate | internal/upload/validate.go — DetectMedia/ValidateFileMeta(+MIME)/ValidateYouTubeURL | ✅ merge cbcfb2d (+MIME-фикс из REVIEW) |
+| 3 | upload-token | internal/upload/token.go — HMAC stateless токен pending-upload (JSON-payload, media привязан) | ✅ merge 73067b1 (+JSON-фикс) |
+| 4 | upload-service | internal/upload/service.go — PrepareFileUpload/ConfirmFileUpload/CreateYouTube; порядок CreateTask→CreateLecture | ✅ merge dc3a818 (+media-binding фикс) |
+| 5 | upload-handlers | internal/upload/handlers.go — Mount + presign/confirm/youtube, errors.Is→401/403/422, HX-Redirect | ✅ merge bbe2082 (+extract_slides-инверсия фикс) |
+| 6 | **upload-ui** | internal/web/page_upload.templ — форма по прототипу design/prototypes/Загрузка.dc.html (сегмент режима, file/url, PDF, тумблер слайдов, title); JS: presign-fetch→прямой PUT в MinIO→confirm; GET /upload-страница. **ГРАБЛИ детерминизма templ/app.css — make gen-check ОБЯЗАТЕЛЬНО** | ⏳ ОСТАЛОСЬ |
+| 7 | **upload-mount** | cmd/server/main.go — адаптер uploadRepo (upload.Repository поверх db.LectureDB), сгенерить uploadSignKey (32б rand, как csrfKey), upload.NewService(core, repo, signer, cfg.PresignedTTL), смонтировать под RequireAuth-группой (рядом с lectureSvc.Mount). **Закрывает BLOCKER из REVIEW handlers: «routes не подключены в main»** | ⏳ ОСТАЛОСЬ |
+
+### Контракты пакета internal/upload (для UI и mount — НЕ менять без нужды)
+- `upload.Service`: `NewService(core Core, repo Repository, signer *Signer, uploadTTL time.Duration)`.
+  - `Core` интерфейс: `CreateUpload(ctx, filename)(coreclient.UploadResult,error)`, `CreateTask(ctx,coreclient.CreateTaskParams)(string,error)` — `*coreclient.CoreClient` удовлетворяет.
+  - `Repository` интерфейс: `CreateLecture(ctx, upload.CreateLectureParams)(lectureID string,error)` — нужен АДАПТЕР поверх db.LectureDB (vmount-под-атом). upload.CreateLectureParams{OwnerID,Title,SourceKind,S3Key,VideoURL,CoreTaskID}.
+  - `Signer`: `NewSigner(key []byte)`, `Sign(userID,s3Key,media,ttl)`, `Verify(token,userID,s3Key)(media,err)`.
+- `Service.Mount(r chi.Router)` регистрирует POST /upload/presign (JSON {filename,size,mime}→{token,put_url,s3_key,media,title,expires_in}), POST /upload/confirm (form token/s3_key/title/has_pdf/extract_slides→HX-Redirect /lectures), POST /upload/youtube (form url/title/has_pdf/extract_slides→HX-Redirect /lectures). GET /upload-страница НЕ в Mount — её добавит UI-под-атом.
+- Ошибки upload: ErrForbidden→403; ErrUnsupportedMedia/ErrEmptyFile/ErrTooLarge/ErrEmptyFilename/ErrMediaMismatch/ErrInvalidURL→422.
+
+### Долги C1-upload (НЕ блокеры, на конец атома/волны)
+1. **PDF-слайды НЕ уходят в ядро** (coreclient.CreateTaskParams не принимает slides-файл). HasPDF влияет только на no_slides и UI-гашение тумблера. Проброс PDF — отдельный атом (меняет coreclient). Задокументировано в service.go комментарием.
+2. **502/503 мягкий экран** при недоступности ядра на confirm/youtube — сейчас 500 (в handlers TODO-комментарий). §8.
+3. **Прямые (не-youtube) URL** — ValidateYouTubeURL ограничен youtube-хостами; прямые медиа-URL долг.
+4. **maxUploadBytes=5GiB грубая константа** беты (не из env) — вынести в конфиг — долг.
+5. **uploadSignKey рестарт-инвалидация** (как csrfKey): рестарт сервера обнулит незавершённые presign-токены. Приемлемо для беты; стабильный ключ из env — долг.
+6. **README** (~строка 521) упоминает noopCoreTasks как активное ограничение — устарел после wiring. ПОПРАВИТЬ на шаге DOCS C1-upload (отдельный docs-субагент по правилу владельца).
+7. **GATE C1 e2e** (загрузка→ядро→вебхук→ready→чтение) требует C1-sync + C1-reader — за пределами C1-upload.
 
 ## C1-lecture — итог атома (смержен 48f55b3, docs b452a96)
 - **data-access `internal/db/lectures.go`**: тип `db.LectureRow`; `LectureDB{Pool}`; методы
@@ -118,6 +157,25 @@ MERGE→DOCS; САМ фактически гоняет ворота (build/vet/t
   templ/app.css, gofmt вне vet, артефакты не коммитить, тесты герметичны/integration за тегом).
 
 ## ПРАВИЛО ПАУЗЫ (владелец 2026-06-24, уточнено)
-Когда **5h-окно тарифа достигает 95%** (`cswap --status`) — закругляй разработку на безопасной
-границе (после мержа атома / до старта нового), допиши handoff (этот файл + NEXT-ORCHESTRATOR),
-чтобы продолжить в новом чистом чате. Не начинать атом, если ясно, что не закроешь до лимита.
+Ориентир — **5h-окно тарифа Claude** (`cswap --status`), НЕ 7d. Работать, пока 5h не достигнет
+**95%**. (7d может быть 90-96% — это НЕ повод останавливаться; владелец явно велел смотреть 5h.)
+При 5h≈95% — закругляй на безопасной границе (после мержа под-атома / до старта нового), допиши
+handoff (этот файл + NEXT-ORCHESTRATOR), продолжишь в чистом чате. Не начинать под-атом, если
+ясно, что не закроешь до лимита. ЭТА ПАУЗА (2026-06-24): сделана на 5h≈72% по решению владельца
+(не по лимиту) — он остановил работу вручную; граница безопасна (5/7 смержено, дерево чисто).
+
+## CODEX — настройка и грабли (важно для нового оркестратора)
+- **Дефолт-модель Codex: gpt-5.5, reasoning effort MEDIUM** (`-m gpt-5.5 -c model_reasoning_effort="medium"`).
+  Владелец велел использовать по умолчанию (память feedback-codex-model-default).
+- **Сеть в песочнице Codex ВКЛЮЧЕНА** (правка `~/.codex/config.toml` 2026-06-24): добавлены
+  `[search] enabled=true` (веб-поиск) и `[sandbox_workspace_write] network_access=true`. Это
+  устранило граблю: раньше песочница Codex не давала сокетов → httptest падал «socket: operation
+  not permitted» → Codex лез ЧИНИТЬ чужие тесты (auth/coreclient), выходя за scope. ТЕПЕРЬ сеть
+  есть, но ВСЁ РАВНО: в промпте Codex-BUILD ЯВНО пиши «трогай ТОЛЬКО пакет X, чужие файлы не
+  редактируй; если go test падает вне твоего пакета на socket/read-only — это окружение, не
+  дефект». После приёмки ВСЕГДА сверяй `git diff --stat integration..HEAD` — не вышел ли за scope.
+  (Память feedback-codex-sandbox-httptest.)
+- **Codex иногда НЕ коммитит результат** (оставляет в рабочем дереве) ИЛИ обрыв сети (403/
+  ConnectionRefused) теряет незакоммиченное. В промпте требуй «коммить ПОСЛЕ КАЖДОЙ ФАЗЫ, часто».
+  Если фикс не закоммичен — оркестратор коммитит САМ пофазно (механика git, не новый сабагент).
+  За сессию было 2-3 обрыва сети у Codex-агентов — перезапуск с тем же заданием решал.
