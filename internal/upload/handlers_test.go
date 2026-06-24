@@ -170,8 +170,8 @@ func TestConfirm_Success(t *testing.T) {
 			if p.Media != "video" {
 				t.Fatalf("Media = %q, want video", p.Media)
 			}
-			if !p.NoSlides {
-				t.Fatal("NoSlides = false, want true")
+			if p.NoSlides {
+				t.Fatal("NoSlides = true, want false")
 			}
 			return "task-confirm", nil
 		},
@@ -214,6 +214,17 @@ func TestConfirm_Success(t *testing.T) {
 	if got := rec.Header().Get("HX-Redirect"); got != "/lectures" {
 		t.Fatalf("HX-Redirect = %q, want /lectures", got)
 	}
+}
+
+func TestConfirm_ExtractSlidesUnchecked(t *testing.T) {
+	assertConfirmNoSlidesFromForm(t, url.Values{}, true)
+}
+
+func TestConfirm_HasPDFForcesNoSlides(t *testing.T) {
+	assertConfirmNoSlidesFromForm(t, url.Values{
+		"has_pdf":        {"on"},
+		"extract_slides": {"on"},
+	}, true)
 }
 
 func TestConfirm_BadToken(t *testing.T) {
@@ -302,4 +313,42 @@ func newFormRequest(method, target string, form url.Values) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	return req
+}
+
+func assertConfirmNoSlidesFromForm(t *testing.T, fields url.Values, want bool) {
+	t.Helper()
+
+	s3Key := "uploads/user-test-uuid/lecture.mp4"
+	signer := newTestServiceSigner()
+	core := &mockCore{
+		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.NoSlides != want {
+				t.Fatalf("NoSlides = %v, want %v", p.NoSlides, want)
+			}
+			return "task-confirm", nil
+		},
+	}
+	repo := &mockRepo{
+		createLectureFunc: func(_ context.Context, _ CreateLectureParams) (string, error) {
+			return "lecture-confirm", nil
+		},
+	}
+	handler := mountTestRouter(NewService(core, repo, signer, time.Hour))
+
+	form := url.Values{
+		"token":  {signer.Sign(testUser.ID, s3Key, "video", time.Hour)},
+		"s3_key": {s3Key},
+		"title":  {"Lecture"},
+	}
+	for k, v := range fields {
+		form[k] = v
+	}
+
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/confirm", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /upload/confirm = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
 }
