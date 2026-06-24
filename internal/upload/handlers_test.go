@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -156,4 +157,84 @@ func TestPresign_Unauthorized(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("POST /upload/presign unauthorized = %d, want 401", rec.Code)
 	}
+}
+
+func TestConfirm_Success(t *testing.T) {
+	s3Key := "uploads/user-test-uuid/lecture.mp4"
+	signer := newTestServiceSigner()
+	core := &mockCore{
+		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.S3Key != s3Key {
+				t.Fatalf("S3Key = %q, want %s", p.S3Key, s3Key)
+			}
+			if p.Media != "video" {
+				t.Fatalf("Media = %q, want video", p.Media)
+			}
+			if !p.NoSlides {
+				t.Fatal("NoSlides = false, want true")
+			}
+			return "task-confirm", nil
+		},
+	}
+	repo := &mockRepo{
+		createLectureFunc: func(_ context.Context, p CreateLectureParams) (string, error) {
+			if p.OwnerID != testUser.ID {
+				t.Fatalf("OwnerID = %q, want %s", p.OwnerID, testUser.ID)
+			}
+			if p.Title != "Lecture" {
+				t.Fatalf("Title = %q, want Lecture", p.Title)
+			}
+			if p.SourceKind != "video" {
+				t.Fatalf("SourceKind = %q, want video", p.SourceKind)
+			}
+			if p.S3Key != s3Key {
+				t.Fatalf("S3Key = %q, want %s", p.S3Key, s3Key)
+			}
+			if p.CoreTaskID != "task-confirm" {
+				t.Fatalf("CoreTaskID = %q, want task-confirm", p.CoreTaskID)
+			}
+			return "lecture-confirm", nil
+		},
+	}
+	handler := mountTestRouter(NewService(core, repo, signer, time.Hour))
+
+	form := url.Values{
+		"token":          {signer.Sign(testUser.ID, s3Key, "video", time.Hour)},
+		"s3_key":         {s3Key},
+		"title":          {"Lecture"},
+		"extract_slides": {"on"},
+	}
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/confirm", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /upload/confirm = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Redirect"); got != "/lectures" {
+		t.Fatalf("HX-Redirect = %q, want /lectures", got)
+	}
+}
+
+func TestConfirm_BadToken(t *testing.T) {
+	form := url.Values{
+		"token":  {"bad-token"},
+		"s3_key": {"uploads/user-test-uuid/lecture.mp4"},
+		"title":  {"Lecture"},
+	}
+	handler := mountTestRouter(newTestHTTPService(&mockCore{}, &mockRepo{}))
+
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/confirm", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("POST /upload/confirm bad token = %d, want 403", rec.Code)
+	}
+}
+
+func newFormRequest(method, target string, form url.Values) *http.Request {
+	req := httptest.NewRequest(method, target, strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
 }
