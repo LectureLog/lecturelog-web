@@ -14,6 +14,7 @@ import (
 func (s *Service) Mount(r chi.Router) {
 	r.Post("/upload/presign", s.handlePresign)
 	r.Post("/upload/confirm", s.handleConfirm)
+	r.Post("/upload/youtube", s.handleYouTube)
 }
 
 func (s *Service) handlePresign(w http.ResponseWriter, r *http.Request) {
@@ -101,6 +102,38 @@ func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
 
 func parseUploadCheckbox(v string) bool {
 	return v == "on" || v == "true" || v == "1"
+}
+
+func (s *Service) handleYouTube(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "неверный запрос", http.StatusBadRequest)
+		return
+	}
+
+	_, err := s.CreateYouTube(r.Context(), user.ID, YouTubeInput{
+		URL:           r.FormValue("url"),
+		Title:         r.FormValue("title"),
+		HasPDF:        parseUploadCheckbox(r.FormValue("has_pdf")),
+		ExtractSlides: parseUploadCheckbox(r.FormValue("extract_slides")),
+	})
+	if err != nil {
+		if errors.Is(err, ErrInvalidURL) {
+			http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+			return
+		}
+		log.Printf("upload: handleYouTube: %v", err)
+		http.Error(w, "внутренняя ошибка", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/lectures")
+	w.WriteHeader(http.StatusOK)
 }
 
 func uploadErrStatus(err error) int {
