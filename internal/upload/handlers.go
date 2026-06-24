@@ -83,7 +83,7 @@ func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		S3Key:         r.FormValue("s3_key"),
 		Title:         r.FormValue("title"),
 		HasPDF:        parseUploadCheckbox(r.FormValue("has_pdf")),
-		ExtractSlides: !parseUploadCheckbox(r.FormValue("extract_slides")),
+		ExtractSlides: parseUploadCheckbox(r.FormValue("extract_slides")),
 	})
 	if err != nil {
 		if errors.Is(err, ErrForbidden) {
