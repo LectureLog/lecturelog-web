@@ -161,6 +161,8 @@ func Load(getenv func(string) string) (*Config, error)
 | `CORE_MINIO_USE_SSL` | MinIO use SSL | нет | `false` |
 | `PRESIGNED_TTL` | TTL presigned-пачки | нет | `24h` |
 | `SESSION_TTL` | TTL сессии | нет | `720h` |
+| `PLATFORM_SECURE` | Флаг `Secure` для кук (`true` в prod/HTTPS) | нет | `false` |
+| `PLATFORM_ADDR` | Адрес и порт HTTP-сервера | нет | `:8080` |
 
 ## Пакет `internal/web`
 
@@ -204,11 +206,113 @@ func Load(getenv func(string) string) (*Config, error)
 - `/static/*` — embed-статика (CSS, htmx, vendor-файлы);
 - `/` — демо-страница (проверка layout).
 
-`cmd/server` пока не создан — точка входа появится в C0-auth.
+`cmd/server` смонтирован в C0-auth — см. раздел ниже.
 
 **Тесты.** Рендер `Layout` в `bytes.Buffer` + `httptest`-проверка роутера.
 Ни браузера, ни Node.js, ни Tailwind-бинаря не требуется — артефакты
 (`*_templ.go`, `app.css`) коммитятся.
+
+## Пакет `internal/auth`
+
+Доменный модуль аутентификации платформы: Google OAuth 2.0, серверные сессии в
+Postgres, CSRF-защита и middleware прав.
+
+**Ключевые типы:**
+
+| Тип | Роль |
+|---|---|
+| `Profile` | Данные пользователя от OAuth-провайдера (sub, email, email_verified, name, picture) |
+| `User` | Доменный пользователь платформы (UUID, email, имя, аватар) |
+| `Session` | Серверная сессия (UUID, UserID, ExpiresAt) |
+| `Service` | Центральный сервис — содержит бизнес-логику входа, сессий и middleware |
+| `Repository` | Интерфейс доступа к данным (мокируется в тестах) |
+| `OAuthProvider` | Интерфейс OAuth-провайдера (мокируется через httptest) |
+
+**Создание сервиса:**
+
+```go
+auth.NewService(repo Repository, provider OAuthProvider, sessionTTL time.Duration, secure bool) *Service
+```
+
+`secure=true` выставляет флаг `Secure` на всех куках — использовать в prod (HTTPS).
+
+**OAuth flow (Google OAuth 2.0).** Профиль берётся из userinfo endpoint (не из
+`id_token`). State-параметр генерируется через `crypto/rand` безусловно; сверка —
+constant-time (`hmac.Equal`-эквивалент) — защищает OAuth round-trip от CSRF.
+`NewGoogleProvider(cfg *oauth2.Config, userinfoURL string) OAuthProvider` позволяет
+подменять endpoint в тестах на `httptest`-сервер.
+
+**Куки:**
+
+| Кука | TTL | Назначение |
+|---|---|---|
+| `ll_session` | из `config.SessionTTL` | HttpOnly, Secure, SameSite=Lax; session_id сессии |
+| `ll_oauth_state` | 600 секунд | Одноразовая; OAuth state (анти-CSRF при login) |
+
+**Логика входа (`resolveUser`).** Алгоритм «email = личность»:
+
+1. `email_verified=false` → `ErrEmailNotVerified`, ничего не создаётся (guard
+   против account takeover).
+2. Матч по `users.email` — найден: `UpsertIdentity`, возвращается существующий.
+3. Не найден: `CreateUser` + `UpsertIdentity`, возвращается новый.
+
+**HTTP-хендлеры и роутинг:**
+
+- `HandleLogin` — генерирует state, устанавливает `ll_oauth_state`, редиректит
+  на `AuthCodeURL` провайдера.
+- `HandleCallback` — сверяет state, обменивает код на профиль через
+  `OAuthProvider.Exchange`, вызывает `resolveUser`, создаёт сессию, выдаёт
+  `ll_session`.
+- `HandleLogout` — удаляет сессию из БД, сбрасывает `ll_session`.
+- `Mount(r chi.Router)` — монтирует все три маршрута в chi-роутер
+  (`GET /auth/login`, `GET /auth/callback`, `POST /auth/logout`).
+
+**Middleware:**
+
+- `LoadSession` — читает `ll_session`, валидирует через `Repository.GetSession`
+  (фильтрация `expires_at > now()` на стороне Postgres), кладёт `*User` в контекст
+  через `UserFromContext`. Анонимные запросы пропускает.
+- `RequireAuth` — блокирует анонимов: обычный запрос → `302 /auth/login`, htmx
+  (`HX-Request: true`) → `401` (htmx не обрабатывает редирект как навигацию).
+
+**CSRF.** `gorilla/csrf` монтируется в `cmd/server` глобально (ключ 32 байта,
+`csrf.RequestHeader("X-CSRF-Token")`). Под htmx токен передаётся через
+`hx-headers={"X-CSRF-Token": "..."}` — место в layout заложено в C0-web.
+
+**Тестируемость.** Интерфейсы `Repository` и `OAuthProvider` позволяют тестировать
+без Postgres и реальных запросов к Google. Дефолтный `go test ./...` проходит
+герметично: OAuth-тест через `httptest`, `resolveUser` — на репозиторий-моке.
+
+## Точка входа `cmd/server`
+
+Единственный бинарь платформы. Цепочка инициализации:
+
+```
+config.Load → db.New + db.Migrate → dbAdapter → auth.NewService → web.NewRouter → ListenAndServe
+```
+
+**`dbAdapter`** — адаптер из `cmd/server`, реализует `auth.Repository` поверх
+`db.UserDB` и `db.SessionDB`. Связка намеренно живёт здесь: `internal/db` не
+импортирует `internal/auth`, `internal/auth` не знает про `pgx`. Корректность
+проверяется compile-time: `var _ auth.Repository = (*dbAdapter)(nil)`.
+
+**`web.NewRouter`** принимает вариативные опции — `web.WithGlobalMiddleware` и
+`web.WithMount`. Пакет `internal/web` не зависит от `internal/auth`; сервис
+инъектируется через опции:
+
+```go
+web.NewRouter(
+    web.WithGlobalMiddleware(authSvc.LoadSession, csrfMiddleware),
+    web.WithMount(func(r chi.Router) { authSvc.Mount(r) }),
+)
+```
+
+**Адрес** задаётся через `PLATFORM_ADDR` (дефолт `:8080`).
+
+**Известное ограничение (технический долг).** CSRF-ключ генерируется через
+`crypto/rand` при каждом старте сервера. При рестарте все ранее выданные CSRF-токены
+инвалидируются. Для прод-стабильности необходимо вынести ключ в env-переменную
+(например, `PLATFORM_CSRF_KEY`).
 
 ## Генерация клиента
 
@@ -288,7 +392,10 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
 - **C0-web** — `internal/web`: каркас «Читальный зал» завершён. chi-роутер,
   templ-layout, htmx, Tailwind v4, дизайн-токены из `design/`, анти-FOUC,
   тумблер темы, web.NewRouter со статикой и демо-страницей, `make gate` зелёный.
+- **C0-auth** — `internal/auth` + `cmd/server`: волна C0 (фундамент) завершена.
+  Google OAuth 2.0, серверные сессии в Postgres, CSRF (`gorilla/csrf`), middleware
+  `LoadSession`/`RequireAuth`, точка входа `cmd/server` с полной цепочкой
+  инициализации, compile-time проверка `dbAdapter`. `make gate` зелёный.
 
-Впереди — C0-auth (последний атом волны C0) и волна C1 (доменные модули:
-upload, lecture, hub, reader, sync). Подробности — в `docs/WORKFLOW.md`
-и `docs/TASKS.md`.
+Впереди — волна C1 (доменные модули: upload, lecture, hub, reader, sync).
+Подробности — в `docs/WORKFLOW.md` и `docs/TASKS.md`.
