@@ -359,6 +359,86 @@ func TestService_Retry_NoSource(t *testing.T) {
 	}
 }
 
+// TestService_Delete_NotOwner проверяет: чужая лекция → ErrNotFound и ядро НЕ трогается.
+func TestService_Delete_NotOwner(t *testing.T) {
+	coreDeleted := false
+	repoDeleted := false
+
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "other-user",
+				CoreTaskID: "task-abc",
+				Status:     lecture.StatusReady,
+			}, nil
+		},
+		delete_: func(_ context.Context, _, _ string) (int64, error) {
+			repoDeleted = true
+			return 0, nil
+		},
+	}
+	core := &mockCore{
+		deleteTask: func(_ context.Context, _ string) error {
+			coreDeleted = true
+			return nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	err := svc.Delete(context.Background(), "lec-1", "me")
+	if err == nil {
+		t.Fatal("Delete чужой лекции: ожидается ошибка")
+	}
+	if err != lecture.ErrNotFound {
+		t.Errorf("ошибка = %v, ожидается ErrNotFound", err)
+	}
+	if coreDeleted {
+		t.Error("Delete чужой лекции: ядро (DeleteTask) НЕ должно быть вызвано")
+	}
+	if repoDeleted {
+		t.Error("Delete чужой лекции: repo.Delete НЕ должно быть вызвано")
+	}
+}
+
+// TestService_Retry_NotOwner проверяет: чужая лекция → ErrNotFound и ядро НЕ трогается.
+func TestService_Retry_NotOwner(t *testing.T) {
+	coreCreated := false
+	repoUpdated := false
+
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "other-user",
+				Status: lecture.StatusFailed,
+				S3Key:  "lectures/other-user/audio.mp3",
+			}, nil
+		},
+		setCoreTaskProcessing: func(_ context.Context, _, _, _ string) (int64, error) {
+			repoUpdated = true
+			return 0, nil
+		},
+	}
+	core := &mockCore{
+		createTask: func(_ context.Context, _ lecture.CreateTaskParams) (string, error) {
+			coreCreated = true
+			return "new-task-xyz", nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	_, err := svc.Retry(context.Background(), "lec-1", "me")
+	if err == nil {
+		t.Fatal("Retry чужой лекции: ожидается ошибка")
+	}
+	if err != lecture.ErrNotFound {
+		t.Errorf("ошибка = %v, ожидается ErrNotFound", err)
+	}
+	if coreCreated {
+		t.Error("Retry чужой лекции: ядро (CreateTask) НЕ должно быть вызвано")
+	}
+	if repoUpdated {
+		t.Error("Retry чужой лекции: repo.SetCoreTaskProcessing НЕ должно быть вызвано")
+	}
+}
+
 // TestService_Retry_Success проверяет успешный retry: CreateTask + SetCoreTaskProcessing.
 func TestService_Retry_Success(t *testing.T) {
 	var coreTaskIDUsed string

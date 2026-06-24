@@ -104,6 +104,10 @@ func (s *Service) Delete(ctx context.Context, lectureID, ownerID string) error {
 	if lec == nil {
 		return ErrNotFound
 	}
+	// Проверка владельца ДО обращения к ядру (нельзя трогать чужую задачу)
+	if lec.OwnerID != ownerID {
+		return ErrNotFound
+	}
 
 	// Шаг 2: удаляем задачу из ядра ПЕРЕД удалением строки (§8)
 	if lec.CoreTaskID != "" {
@@ -133,6 +137,10 @@ func (s *Service) Retry(ctx context.Context, lectureID, ownerID string) (Lecture
 		return Lecture{}, fmt.Errorf("lecture: Retry FindByID: %w", err)
 	}
 	if lec == nil {
+		return Lecture{}, ErrNotFound
+	}
+	// Проверка владельца ДО обращения к ядру (нельзя пересоздавать чужую задачу)
+	if lec.OwnerID != ownerID {
 		return Lecture{}, ErrNotFound
 	}
 	if lec.Status != StatusFailed {
