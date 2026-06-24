@@ -2,6 +2,7 @@ package lecture_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -158,4 +159,240 @@ func TestService_Rename_NotOwner(t *testing.T) {
 	if err == nil {
 		t.Fatal("Rename чужой лекции: ожидается ошибка")
 	}
+}
+
+// ─── Тесты SetVisibility ─────────────────────────────────────────────────────
+
+// TestService_SetVisibility_PublicOnReady проверяет публикацию готовой лекции.
+func TestService_SetVisibility_PublicOnReady(t *testing.T) {
+	readyLecture := &lecture.Lecture{
+		ID: "lec-1", OwnerID: "user-1",
+		Status:     lecture.StatusReady,
+		Visibility: lecture.VisibilityPrivate,
+	}
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 1, nil // affected=1 → успех
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			updated := *readyLecture
+			updated.Visibility = lecture.VisibilityPublic
+			return &updated, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	lec, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityPublic)
+	if err != nil {
+		t.Fatalf("SetVisibility public на ready: %v", err)
+	}
+	if lec.Visibility != lecture.VisibilityPublic {
+		t.Errorf("Visibility = %q, ожидается %q", lec.Visibility, lecture.VisibilityPublic)
+	}
+}
+
+// TestService_SetVisibility_PublicOnProcessing проверяет, что public на не-ready → ErrNotReady.
+func TestService_SetVisibility_PublicOnProcessing(t *testing.T) {
+	processingLecture := &lecture.Lecture{
+		ID: "lec-1", OwnerID: "user-1",
+		Status:     lecture.StatusProcessing,
+		Visibility: lecture.VisibilityPrivate,
+	}
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil // affected=0 → статус не ready
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return processingLecture, nil // лекция существует, но не ready
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityPublic)
+	if err == nil {
+		t.Fatal("SetVisibility public на processing: ожидается ошибка")
+	}
+	// Ошибка должна быть ErrNotReady, не ErrNotFound
+	if err != lecture.ErrNotReady {
+		t.Errorf("ошибка = %v, ожидается ErrNotReady", err)
+	}
+}
+
+// TestService_SetVisibility_Private проверяет снятие с публикации.
+func TestService_SetVisibility_Private(t *testing.T) {
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 1, nil
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID:         "lec-1",
+				Visibility: lecture.VisibilityPrivate,
+			}, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	lec, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityPrivate)
+	if err != nil {
+		t.Fatalf("SetVisibility private: %v", err)
+	}
+	if lec.Visibility != lecture.VisibilityPrivate {
+		t.Errorf("Visibility = %q, ожидается %q", lec.Visibility, lecture.VisibilityPrivate)
+	}
+}
+
+// ─── Тесты Delete ────────────────────────────────────────────────────────────
+
+// TestService_Delete_CoreBeforeRepo проверяет порядок: ядро → строка.
+func TestService_Delete_CoreBeforeRepo(t *testing.T) {
+	var callOrder []string
+
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			callOrder = append(callOrder, "FindByID")
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				CoreTaskID: "task-abc",
+				Status:     lecture.StatusReady,
+			}, nil
+		},
+		delete_: func(_ context.Context, _, _ string) (int64, error) {
+			callOrder = append(callOrder, "Delete")
+			return 1, nil
+		},
+	}
+	core := &mockCore{
+		deleteTask: func(_ context.Context, _ string) error {
+			callOrder = append(callOrder, "DeleteTask")
+			return nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	if err := svc.Delete(context.Background(), "lec-1", "user-1"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	// Проверяем порядок: сначала ядро, потом БД
+	if len(callOrder) != 3 {
+		t.Fatalf("callOrder len = %d, ожидается 3, calls = %v", len(callOrder), callOrder)
+	}
+	if callOrder[0] != "FindByID" {
+		t.Errorf("callOrder[0] = %q, ожидается FindByID", callOrder[0])
+	}
+	if callOrder[1] != "DeleteTask" {
+		t.Errorf("callOrder[1] = %q, ожидается DeleteTask (ядро ПЕРЕД БД)", callOrder[1])
+	}
+	if callOrder[2] != "Delete" {
+		t.Errorf("callOrder[2] = %q, ожидается Delete", callOrder[2])
+	}
+}
+
+// TestService_Delete_CoreError_NoDBDelete проверяет: ошибка ядра → строка НЕ удаляется.
+func TestService_Delete_CoreError_NoDBDelete(t *testing.T) {
+	repoDeleted := false
+
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				CoreTaskID: "task-abc",
+			}, nil
+		},
+		delete_: func(_ context.Context, _, _ string) (int64, error) {
+			repoDeleted = true
+			return 1, nil
+		},
+	}
+	core := &mockCore{
+		deleteTask: func(_ context.Context, _ string) error {
+			return fmt.Errorf("ядро недоступно")
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	err := svc.Delete(context.Background(), "lec-1", "user-1")
+	if err == nil {
+		t.Fatal("Delete при ошибке ядра: ожидается ошибка")
+	}
+	if repoDeleted {
+		t.Error("Delete при ошибке ядра: строка БД НЕ должна быть удалена")
+	}
+}
+
+// ─── Тесты Retry ─────────────────────────────────────────────────────────────
+
+// TestService_Retry_NotFailed проверяет, что retry на не-failed → ErrNotFailed.
+func TestService_Retry_NotFailed(t *testing.T) {
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				Status: lecture.StatusProcessing, // не failed
+			}, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.Retry(context.Background(), "lec-1", "user-1")
+	if err == nil {
+		t.Fatal("Retry на processing: ожидается ошибка")
+	}
+	if err != lecture.ErrNotFailed {
+		t.Errorf("ошибка = %v, ожидается ErrNotFailed", err)
+	}
+}
+
+// TestService_Retry_NoSource проверяет retry без источника → ErrNoRetrySource.
+func TestService_Retry_NoSource(t *testing.T) {
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				Status: lecture.StatusFailed,
+				S3Key:  "", VideoURL: "", // нет источника
+			}, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.Retry(context.Background(), "lec-1", "user-1")
+	if err == nil {
+		t.Fatal("Retry без источника: ожидается ошибка")
+	}
+	if err != lecture.ErrNoRetrySource {
+		t.Errorf("ошибка = %v, ожидается ErrNoRetrySource", err)
+	}
+}
+
+// TestService_Retry_Success проверяет успешный retry: CreateTask + SetCoreTaskProcessing.
+func TestService_Retry_Success(t *testing.T) {
+	var coreTaskIDUsed string
+
+	repo := &mockRepo{
+		findByID: func(_ context.Context, id string) (*lecture.Lecture, error) {
+			// Первый вызов (для проверки), второй вызов (свежие данные после retry)
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				Status:     lecture.StatusFailed,
+				S3Key:      "lectures/user-1/audio.mp3",
+				SourceKind: "audio",
+			}, nil
+		},
+		setCoreTaskProcessing: func(_ context.Context, _, _, coreTaskID string) (int64, error) {
+			coreTaskIDUsed = coreTaskID
+			return 1, nil
+		},
+	}
+	core := &mockCore{
+		createTask: func(_ context.Context, p lecture.CreateTaskParams) (string, error) {
+			return "new-task-xyz", nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	lec, err := svc.Retry(context.Background(), "lec-1", "user-1")
+	if err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	// Проверяем, что SetCoreTaskProcessing получил новый task ID
+	if coreTaskIDUsed != "new-task-xyz" {
+		t.Errorf("core_task_id = %q, ожидается %q", coreTaskIDUsed, "new-task-xyz")
+	}
+	// Статус должен быть processing (findByID возвращает лекцию, статус не меняется в моке,
+	// но логика должна вернуть что-то без ошибки)
+	_ = lec
 }
