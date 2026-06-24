@@ -11,10 +11,14 @@ func TestSignVerify_RoundTrip(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", time.Minute)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", time.Minute)
 
-	if err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != nil {
+	media, err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4")
+	if err != nil {
 		t.Fatalf("Verify() error = %v, want nil", err)
+	}
+	if media != "video" {
+		t.Fatalf("Verify() media = %q, want video", media)
 	}
 }
 
@@ -22,10 +26,14 @@ func TestSignVerify_RoundTripWithPayloadSeparators(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user|1", "uploads/user|1/video|part.mp4", time.Minute)
+	token := signer.Sign("user|1", "uploads/user|1/video|part.mp4", "audio", time.Minute)
 
-	if err := signer.Verify(token, "user|1", "uploads/user|1/video|part.mp4"); err != nil {
+	media, err := signer.Verify(token, "user|1", "uploads/user|1/video|part.mp4")
+	if err != nil {
 		t.Fatalf("Verify() error = %v, want nil", err)
+	}
+	if media != "audio" {
+		t.Fatalf("Verify() media = %q, want audio", media)
 	}
 }
 
@@ -33,9 +41,9 @@ func TestVerify_WrongUser(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", time.Minute)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", time.Minute)
 
-	if err := signer.Verify(token, "user-2", "uploads/user-1/video.mp4"); err != ErrTokenMismatch {
+	if _, err := signer.Verify(token, "user-2", "uploads/user-1/video.mp4"); err != ErrTokenMismatch {
 		t.Fatalf("Verify() error = %v, want %v", err, ErrTokenMismatch)
 	}
 }
@@ -44,9 +52,9 @@ func TestVerify_WrongS3Key(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", time.Minute)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", time.Minute)
 
-	if err := signer.Verify(token, "user-1", "uploads/user-1/other.mp4"); err != ErrTokenMismatch {
+	if _, err := signer.Verify(token, "user-1", "uploads/user-1/other.mp4"); err != ErrTokenMismatch {
 		t.Fatalf("Verify() error = %v, want %v", err, ErrTokenMismatch)
 	}
 }
@@ -55,10 +63,10 @@ func TestVerify_TamperedPayload(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", time.Minute)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", time.Minute)
 	token = tamperPayload(t, token)
 
-	if err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
+	if _, err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
 		t.Fatalf("Verify() error = %v, want %v", err, ErrBadToken)
 	}
 }
@@ -69,9 +77,9 @@ func TestVerify_WrongKey(t *testing.T) {
 	otherSigner := NewSigner([]byte("other-secret-key"))
 	otherSigner.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", time.Minute)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", time.Minute)
 
-	if err := otherSigner.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
+	if _, err := otherSigner.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
 		t.Fatalf("Verify() error = %v, want %v", err, ErrBadToken)
 	}
 }
@@ -80,9 +88,9 @@ func TestVerify_Expired(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
 
-	token := signer.Sign("user-1", "uploads/user-1/video.mp4", -time.Second)
+	token := signer.Sign("user-1", "uploads/user-1/video.mp4", "video", -time.Second)
 
-	if err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrTokenExpired {
+	if _, err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrTokenExpired {
 		t.Fatalf("Verify() error = %v, want %v", err, ErrTokenExpired)
 	}
 }
@@ -93,7 +101,7 @@ func TestVerify_Garbage(t *testing.T) {
 
 	for _, token := range []string{"no-dot", "not.base64"} {
 		t.Run(token, func(t *testing.T) {
-			if err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
+			if _, err := signer.Verify(token, "user-1", "uploads/user-1/video.mp4"); err != ErrBadToken {
 				t.Fatalf("Verify() error = %v, want %v", err, ErrBadToken)
 			}
 		})

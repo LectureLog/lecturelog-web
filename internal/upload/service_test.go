@@ -35,8 +35,12 @@ func TestPrepareFileUpload_Valid(t *testing.T) {
 	if got.Token == "" {
 		t.Fatal("Token is empty")
 	}
-	if err := signer.Verify(got.Token, userID, "uploads/user-1/lecture.mp4"); err != nil {
+	media, err := signer.Verify(got.Token, userID, "uploads/user-1/lecture.mp4")
+	if err != nil {
 		t.Fatalf("Verify(token) error = %v, want nil", err)
+	}
+	if media != "video" {
+		t.Fatalf("Verify(token) media = %q, want video", media)
 	}
 	if got.PutURL != "https://storage.example/put" {
 		t.Fatalf("PutURL = %q, want storage URL", got.PutURL)
@@ -87,7 +91,7 @@ func TestPrepareFileUpload_MIMEMismatch(t *testing.T) {
 func TestConfirmFileUpload_Success(t *testing.T) {
 	ctx := context.Background()
 	signer := newTestServiceSigner()
-	token := signer.Sign("user-1", "uploads/user-1/lecture.mp4", time.Hour)
+	token := signer.Sign("user-1", "uploads/user-1/lecture.mp4", "audio", time.Hour)
 	order := make([]string, 0, 2)
 	core := &mockCore{
 		createTaskFunc: func(ctx context.Context, p coreclient.CreateTaskParams) (string, error) {
@@ -95,8 +99,8 @@ func TestConfirmFileUpload_Success(t *testing.T) {
 			if p.S3Key != "uploads/user-1/lecture.mp4" {
 				t.Fatalf("S3Key = %q, want uploads/user-1/lecture.mp4", p.S3Key)
 			}
-			if p.Media != "video" {
-				t.Fatalf("Media = %q, want video", p.Media)
+			if p.Media != "audio" {
+				t.Fatalf("Media = %q, want audio", p.Media)
 			}
 			return "task-1", nil
 		},
@@ -110,8 +114,8 @@ func TestConfirmFileUpload_Success(t *testing.T) {
 			if p.Title != "Lecture" {
 				t.Fatalf("Title = %q, want Lecture", p.Title)
 			}
-			if p.SourceKind != "video" {
-				t.Fatalf("SourceKind = %q, want video", p.SourceKind)
+			if p.SourceKind != "audio" {
+				t.Fatalf("SourceKind = %q, want audio", p.SourceKind)
 			}
 			if p.S3Key != "uploads/user-1/lecture.mp4" {
 				t.Fatalf("S3Key = %q, want uploads/user-1/lecture.mp4", p.S3Key)
@@ -128,7 +132,6 @@ func TestConfirmFileUpload_Success(t *testing.T) {
 		Token:         token,
 		S3Key:         "uploads/user-1/lecture.mp4",
 		Title:         "Lecture",
-		Media:         "video",
 		ExtractSlides: true,
 	})
 	if err != nil {
@@ -174,9 +177,8 @@ func TestConfirmFileUpload_CoreError(t *testing.T) {
 	service := NewService(core, repo, signer, time.Hour)
 
 	_, err := service.ConfirmFileUpload(context.Background(), "user-1", ConfirmInput{
-		Token: signer.Sign("user-1", "uploads/user-1/lecture.mp4", time.Hour),
+		Token: signer.Sign("user-1", "uploads/user-1/lecture.mp4", "video", time.Hour),
 		S3Key: "uploads/user-1/lecture.mp4",
-		Media: "video",
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("ConfirmFileUpload() error = %v, want %v", err, wantErr)
@@ -279,9 +281,8 @@ func assertConfirmNoSlides(t *testing.T, input ConfirmInput, want bool) {
 	t.Helper()
 
 	signer := newTestServiceSigner()
-	input.Token = signer.Sign("user-1", "uploads/user-1/lecture.mp4", time.Hour)
+	input.Token = signer.Sign("user-1", "uploads/user-1/lecture.mp4", "video", time.Hour)
 	input.S3Key = "uploads/user-1/lecture.mp4"
-	input.Media = "video"
 	core := &mockCore{
 		createTaskFunc: func(ctx context.Context, p coreclient.CreateTaskParams) (string, error) {
 			if p.NoSlides != want {
