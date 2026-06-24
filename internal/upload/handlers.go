@@ -13,6 +13,7 @@ import (
 // Mount монтирует API-маршруты загрузки.
 func (s *Service) Mount(r chi.Router) {
 	r.Post("/upload/presign", s.handlePresign)
+	r.Post("/upload/confirm", s.handleConfirm)
 }
 
 func (s *Service) handlePresign(w http.ResponseWriter, r *http.Request) {
@@ -62,6 +63,44 @@ func (s *Service) handlePresign(w http.ResponseWriter, r *http.Request) {
 	}); err != nil {
 		log.Printf("upload: handlePresign encode: %v", err)
 	}
+}
+
+func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
+	user := auth.UserFromContext(r.Context())
+	if user == nil {
+		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "неверный запрос", http.StatusBadRequest)
+		return
+	}
+
+	_, err := s.ConfirmFileUpload(r.Context(), user.ID, ConfirmInput{
+		Token:         r.FormValue("token"),
+		S3Key:         r.FormValue("s3_key"),
+		Title:         r.FormValue("title"),
+		HasPDF:        parseUploadCheckbox(r.FormValue("has_pdf")),
+		ExtractSlides: !parseUploadCheckbox(r.FormValue("extract_slides")),
+	})
+	if err != nil {
+		if errors.Is(err, ErrForbidden) {
+			http.Error(w, err.Error(), http.StatusForbidden)
+			return
+		}
+		// TODO: показать отдельный 502-экран, когда сервис обработки недоступен.
+		log.Printf("upload: handleConfirm: %v", err)
+		http.Error(w, "внутренняя ошибка", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("HX-Redirect", "/lectures")
+	w.WriteHeader(http.StatusOK)
+}
+
+func parseUploadCheckbox(v string) bool {
+	return v == "on" || v == "true" || v == "1"
 }
 
 func uploadErrStatus(err error) int {
