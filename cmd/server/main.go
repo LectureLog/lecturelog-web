@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/LectureLog/lecturelog-web/internal/config"
 	"github.com/LectureLog/lecturelog-web/internal/db"
+	"github.com/LectureLog/lecturelog-web/internal/lecture"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 
 	"github.com/go-chi/chi/v5"
@@ -156,6 +158,13 @@ func main() {
 	// Создаём auth.Service
 	authSvc := auth.NewService(repo, provider, cfg.SessionTTL, secureCookies)
 
+	// Инициализируем lecture.Service с адаптером БД и заглушкой ядра (noopCoreTasks).
+	// Долг C1: noopCoreTasks заменить на coreTasksAdapter поверх coreclient.CoreClient.
+	lectureSvc := lecture.NewService(
+		&lectureRepo{lectures: &db.LectureDB{Pool: pool}},
+		noopCoreTasks{},
+	)
+
 	// CSRF-ключ генерируется на старте (32 случайных байта).
 	// ДОЛГ: для прод-стабильности вынести в env (PLATFORM_CSRF_KEY) — рестарт инвалидирует токены.
 	// Решение оркестратора: internal/config НЕ модифицируем, беты хватает.
@@ -172,14 +181,32 @@ func main() {
 		csrf.RequestHeader("X-CSRF-Token"),
 	)
 
+	// csrf-инжектор: добавляет CSRF-токен в контекст запроса после csrfMiddleware.
+	// Хендлеры лекций читают токен через web.CSRFTokenFromContext(r.Context())
+	// и передают в LayoutData.CSRFToken для hx-headers.
+	csrfInjector := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			ctx := web.WithCSRFToken(r.Context(), csrf.Token(r))
+			next.ServeHTTP(w, r.WithContext(ctx))
+		})
+	}
+
 	// Собираем chi-роутер с auth-middleware и маршрутами
 	handler := web.NewRouter(
 		web.WithGlobalMiddleware(
 			authSvc.LoadSession, // читает сессию → *User в контекст
 			csrfMiddleware,      // CSRF-защита мутирующих маршрутов
+			csrfInjector,        // кладёт csrf.Token(r) в контекст для layout
 		),
 		web.WithMount(func(r chi.Router) {
 			authSvc.Mount(r) // GET /auth/login, GET /auth/callback, POST /auth/logout
+		}),
+		web.WithMount(func(r chi.Router) {
+			// Группа под RequireAuth: только аутентифицированные пользователи
+			r.Group(func(pr chi.Router) {
+				pr.Use(authSvc.RequireAuth)
+				lectureSvc.Mount(pr) // GET /lectures, POST /lectures/{id}/*
+			})
 		}),
 	)
 
@@ -197,6 +224,100 @@ func envOr(key, def string) string {
 	}
 	return def
 }
+
+// ─── Адаптер для lecture.Repository ─────────────────────────────────────────
+
+// lectureRepo реализует lecture.Repository поверх db.LectureDB.
+// db не знает про lecture (нет импорта lecture→db), lecture не знает про pgx.
+// Связка происходит здесь, в cmd/server.
+type lectureRepo struct {
+	lectures *db.LectureDB
+}
+
+func (r *lectureRepo) ListByOwner(ctx context.Context, ownerID string) ([]lecture.Lecture, error) {
+	rows, err := r.lectures.ListByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]lecture.Lecture, len(rows))
+	for i, row := range rows {
+		result[i] = rowToLecture(row)
+	}
+	return result, nil
+}
+
+func (r *lectureRepo) FindByID(ctx context.Context, lectureID string) (*lecture.Lecture, error) {
+	row, err := r.lectures.FindByID(ctx, lectureID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+	lec := rowToLecture(*row)
+	return &lec, nil
+}
+
+func (r *lectureRepo) Rename(ctx context.Context, lectureID, ownerID, title string) (int64, error) {
+	return r.lectures.Rename(ctx, lectureID, ownerID, title)
+}
+
+func (r *lectureRepo) SetVisibility(ctx context.Context, lectureID, ownerID, visibility string) (int64, error) {
+	return r.lectures.SetVisibility(ctx, lectureID, ownerID, visibility)
+}
+
+func (r *lectureRepo) Delete(ctx context.Context, lectureID, ownerID string) (int64, error) {
+	return r.lectures.Delete(ctx, lectureID, ownerID)
+}
+
+func (r *lectureRepo) SetCoreTaskProcessing(ctx context.Context, lectureID, ownerID, coreTaskID string) (int64, error) {
+	return r.lectures.SetCoreTaskProcessing(ctx, lectureID, ownerID, coreTaskID)
+}
+
+// rowToLecture маппит db.LectureRow → lecture.Lecture.
+func rowToLecture(row db.LectureRow) lecture.Lecture {
+	return lecture.Lecture{
+		ID:          row.LectureID,
+		OwnerID:     row.OwnerID,
+		CoreTaskID:  row.CoreTaskID,
+		Status:      lecture.Status(row.Status),
+		ErrorCode:   row.ErrorCode,
+		Visibility:  lecture.Visibility(row.Visibility),
+		SourceKind:  row.SourceKind,
+		S3Key:       row.S3Key,
+		VideoURL:    row.VideoURL,
+		Title:       row.Title,
+		CreatedAt:   row.CreatedAt,
+		UpdatedAt:   row.UpdatedAt,
+		PublishedAt: row.PublishedAt,
+	}
+}
+
+// ─── noopCoreTasks — заглушка ядра до C1-upload/C1-sync ─────────────────────
+
+// noopCoreTasks — заглушка lecture.CoreTasks.
+// Удаление работает без ядра (строка уходит — наблюдаемо).
+// Retry возвращает "недоступно" — честное поведение до проводки coreclient.
+// Полная реализация через coreTasksAdapter — долг атома C1.
+type noopCoreTasks struct{}
+
+func (noopCoreTasks) DeleteTask(_ context.Context, _ string) error {
+	// Удаление: noopCoreTasks ничего не делает в ядре — допустимо для демонстрации.
+	// Долг C1: заменить на coreclient.DeleteTask.
+	return nil
+}
+
+func (noopCoreTasks) CreateTask(_ context.Context, _ lecture.CreateTaskParams) (string, error) {
+	// Retry: честно сообщаем что обработка временно недоступна.
+	// Долг C1: заменить на coreclient.CreateTask через coreTasksAdapter.
+	return "", errors.New("обработка временно недоступна")
+}
+
+// _ — проверка на этапе компиляции: lectureRepo реализует lecture.Repository.
+var _ lecture.Repository = (*lectureRepo)(nil)
+
+// _ — проверка на этапе компиляции: noopCoreTasks реализует lecture.CoreTasks.
+var _ lecture.CoreTasks = noopCoreTasks{}
 
 // _ — проверка на этапе компиляции: dbAdapter реализует auth.Repository.
 var _ auth.Repository = (*dbAdapter)(nil)
