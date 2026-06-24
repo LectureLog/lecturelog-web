@@ -233,6 +233,71 @@ func TestConfirm_BadToken(t *testing.T) {
 	}
 }
 
+func TestYouTube_Success(t *testing.T) {
+	videoURL := "https://youtu.be/video"
+	core := &mockCore{
+		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.VideoURL != videoURL {
+				t.Fatalf("VideoURL = %q, want %s", p.VideoURL, videoURL)
+			}
+			return "task-youtube", nil
+		},
+	}
+	repo := &mockRepo{
+		createLectureFunc: func(_ context.Context, p CreateLectureParams) (string, error) {
+			if p.OwnerID != testUser.ID {
+				t.Fatalf("OwnerID = %q, want %s", p.OwnerID, testUser.ID)
+			}
+			if p.Title != "YouTube Lecture" {
+				t.Fatalf("Title = %q, want YouTube Lecture", p.Title)
+			}
+			if p.SourceKind != "video_url" {
+				t.Fatalf("SourceKind = %q, want video_url", p.SourceKind)
+			}
+			if p.VideoURL != videoURL {
+				t.Fatalf("VideoURL = %q, want %s", p.VideoURL, videoURL)
+			}
+			if p.CoreTaskID != "task-youtube" {
+				t.Fatalf("CoreTaskID = %q, want task-youtube", p.CoreTaskID)
+			}
+			return "lecture-youtube", nil
+		},
+	}
+	handler := mountTestRouter(newTestHTTPService(core, repo))
+
+	form := url.Values{
+		"url":            {videoURL},
+		"title":          {"YouTube Lecture"},
+		"extract_slides": {"on"},
+	}
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/youtube", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /upload/youtube = %d, want 200, body: %s", rec.Code, rec.Body.String())
+	}
+	if got := rec.Header().Get("HX-Redirect"); got != "/lectures" {
+		t.Fatalf("HX-Redirect = %q, want /lectures", got)
+	}
+}
+
+func TestYouTube_BadURL(t *testing.T) {
+	handler := mountTestRouter(newTestHTTPService(&mockCore{}, &mockRepo{}))
+
+	form := url.Values{
+		"url":   {"https://example.com/video"},
+		"title": {"Bad video"},
+	}
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/youtube", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /upload/youtube bad URL = %d, want 422", rec.Code)
+	}
+}
+
 func newFormRequest(method, target string, form url.Values) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
