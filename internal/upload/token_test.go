@@ -18,6 +18,17 @@ func TestSignVerify_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestSignVerify_RoundTripWithPayloadSeparators(t *testing.T) {
+	signer := NewSigner([]byte("secret-key"))
+	signer.now = fixedNow
+
+	token := signer.Sign("user|1", "uploads/user|1/video|part.mp4", time.Minute)
+
+	if err := signer.Verify(token, "user|1", "uploads/user|1/video|part.mp4"); err != nil {
+		t.Fatalf("Verify() error = %v, want nil", err)
+	}
+}
+
 func TestVerify_WrongUser(t *testing.T) {
 	signer := NewSigner([]byte("secret-key"))
 	signer.now = fixedNow
