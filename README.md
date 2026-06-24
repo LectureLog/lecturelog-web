@@ -105,6 +105,28 @@ UUID генерится базой (`gen_random_uuid()`, расширение `p
 Частичный индекс `idx_lectures_core_task_id` на `lectures.core_task_id` (WHERE NOT
 NULL) — обеспечивает быстрый матч входящего вебхука по идентификатору задачи ядра.
 
+**Data-access лекций (`db.LectureDB`).** Тип `LectureDB` предоставляет операции
+над таблицей `lectures`; не содержит доменной логики (порядок вызовов ядро→БД —
+в пакете `lecture`).
+
+Тип строки — `db.LectureRow`; nullable текстовые поля (`core_task_id`, `s3_key`,
+`video_url`, `error_code`) возвращаются через `COALESCE` как пустая строка;
+`published_at` — `*time.Time`.
+
+| Метод | Сигнатура | Описание |
+|---|---|---|
+| `ListByOwner` | `(ctx, ownerID) ([]LectureRow, error)` | Лекции владельца, updated\_at DESC; возвращает пустой срез (не nil) |
+| `FindByID` | `(ctx, lectureID) (*LectureRow, error)` | По PK; (nil, nil) если не найдена |
+| `Rename` | `(ctx, lectureID, ownerID, title) (int64, error)` | Обновляет title + updated\_at; фильтр owner\_id; возвращает affected |
+| `SetVisibility` | `(ctx, lectureID, ownerID, visibility) (int64, error)` | public: WHERE status='ready', устанавливает published\_at; private: published\_at не обнуляется |
+| `Delete` | `(ctx, lectureID, ownerID) (int64, error)` | Hard-delete; вызывается только после `core.DeleteTask` (гарантия домена) |
+| `SetCoreTaskProcessing` | `(ctx, lectureID, ownerID, coreTaskID) (int64, error)` | Переводит failed→processing, обновляет core\_task\_id, очищает error\_code; WHERE status='failed' |
+| `UpdateStatusConditional` | `(ctx, coreTaskID, status, errorCode) (int64, error)` | Анти-гонка: обновляет статус только из processing (WHERE status='processing'); потребитель — C1-sync |
+
+`UpdateStatusConditional` — единственный метод, который потребляет C1-sync
+(вебхук / поллинг), а не пакет `lecture`; его назначение — атомарно принять
+результат ядра без гонки с параллельным retry.
+
 **Тесты.** Дефолтный `go test ./...` не требует Postgres: проверяет встроенность
 embed-файлов, синтаксическую корректность SQL и отказ `New` на заведомо битом DSN.
 Интеграционный тест (тег `integration`) поднимает Postgres через `testcontainers`,
@@ -201,6 +223,30 @@ func Load(getenv func(string) string) (*Config, error)
 к Tailwind через директиву `@theme` (`var(--token)`); тёмная тема —
 переопределение переменных под `[data-theme="dark"]`.
 
+**Страница «Мои лекции» (`page_lectures.templ`).** Добавлена в C1-lecture.
+
+- `LectureCardVM` — view-модель карточки (ID, Title, Status, StatusLabel,
+  Visibility, SourceKind, CanPublish, CanRetry, ErrorText, UpdatedAt); маппинг
+  `lecture.Lecture → LectureCardVM` выполняет `lecture/handlers.go`.
+- `LecturesPage(data LayoutData, vms []LectureCardVM)` — полная страница в базовом
+  Layout; пустое состояние — `LecturesEmpty`.
+- `LectureCard(vm LectureCardVM)` — карточка; используется и в полных ответах
+  (GET /lectures), и в htmx-партиалах (rename / visibility / retry).
+- `LectureTitleInline(vm)` — inline-форма переименования (POST на rename).
+- `LectureVisibilityToggle(vm)` — тумблер видимости (POST на visibility).
+
+**CSRF в hx-headers (закрытие долга C0-web).** Добавлен `internal/web/csrf.go`:
+
+```go
+func WithCSRFToken(ctx context.Context, token string) context.Context
+func CSRFTokenFromContext(ctx context.Context) string
+```
+
+`LayoutData.CSRFToken` передаётся в `Layout` и выводится в `hx-headers` шапки
+(`{"X-CSRF-Token": "<токен>"}`), отчего все htmx-запросы страницы автоматически
+несут CSRF-токен. `cmd/server` инжектирует токен в контекст через
+`csrfInjector`-middleware после `gorilla/csrf`.
+
 **Роутер.** `web.NewRouter()` (chi) монтирует:
 
 - `/static/*` — embed-статика (CSS, htmx, vendor-файлы);
@@ -282,6 +328,70 @@ constant-time (`hmac.Equal`-эквивалент) — защищает OAuth rou
 **Тестируемость.** Интерфейсы `Repository` и `OAuthProvider` позволяют тестировать
 без Postgres и реальных запросов к Google. Дефолтный `go test ./...` проходит
 герметично: OAuth-тест через `httptest`, `resolveUser` — на репозиторий-моке.
+
+## Пакет `internal/lecture`
+
+Доменный модуль «Мои лекции»: хранит бизнес-логику управления лекциями
+пользователя и монтирует HTTP-хендлеры ЛК.
+
+**Ключевые типы:**
+
+| Тип | Роль |
+|---|---|
+| `Lecture` | Доменная лекция (ID, OwnerID, CoreTaskID, Status, Visibility, SourceKind, S3Key, VideoURL, Title, …) |
+| `Status` | Enum статуса обработки: `processing` / `ready` / `failed` |
+| `Visibility` | Enum видимости: `private` / `public` |
+| `Repository` | Интерфейс data-access (владеет пакет lecture → адаптер живёт в cmd/server) |
+| `CoreTasks` | Интерфейс к ядру: `DeleteTask` + `CreateTask` (мокабельность без coreclient) |
+| `CreateTaskParams` | Параметры создания задачи: S3Key, VideoURL, Media |
+| `Service` | Центральный сервис; содержит repo и core |
+
+**Конструктор:**
+
+```go
+lecture.NewService(repo Repository, core CoreTasks) *Service
+```
+
+**Методы Service:**
+
+| Метод | Сигнатура | Описание |
+|---|---|---|
+| `List` | `(ctx, ownerID) ([]Lecture, error)` | Список лекций владельца (updated\_at DESC) |
+| `Rename` | `(ctx, lectureID, ownerID, title) (Lecture, error)` | Trim + валидация ≤200 симв.; возвращает свежую запись |
+| `SetVisibility` | `(ctx, lectureID, ownerID, vis Visibility) (Lecture, error)` | Публикация только готовых (ready); снятие — в любой момент |
+| `Delete` | `(ctx, lectureID, ownerID) error` | Сначала `core.DeleteTask`, затем удаление строки; ошибка ядра прерывает операцию |
+| `Retry` | `(ctx, lectureID, ownerID) (Lecture, error)` | Повторная обработка только failed-лекций с источником |
+
+**Бизнес-правила:**
+
+- **Публикация** (`SetVisibility → public`): разрешена только при `status=ready`; иначе `ErrNotReady`.
+- **Retry**: разрешён только при `status=failed` и наличии `S3Key` или `VideoURL`; иначе `ErrNotFailed` / `ErrNoRetrySource`. Алгоритм: `CreateTask` в ядре → `SetCoreTaskProcessing` в БД (failed→processing).
+- **Delete**: owner-проверка выполняется **до** обращения к ядру — нельзя удалить чужую задачу. Если ядро вернуло ошибку — строка в БД не трогается.
+- **Анти-перебор ID**: во всех мутациях (Rename/SetVisibility/Delete/Retry) несуществующая и чужая лекция возвращают одинаковый `ErrNotFound` — исключает оракул чужих UUID.
+
+**Доменные ошибки:**
+
+| Константа | Значение |
+|---|---|
+| `ErrNotFound` | Лекция не найдена или нет прав |
+| `ErrNotReady` | Публикация доступна только для ready |
+| `ErrNotFailed` | Retry доступен только для failed |
+| `ErrNoRetrySource` | Нет источника для повтора |
+
+**HTTP-хендлеры (`Service.Mount`):**
+
+```
+GET    /lectures                 — страница «Мои лекции» (полный рендер)
+POST   /lectures/{id}/rename     — переименование (htmx partial: карточка)
+POST   /lectures/{id}/visibility — переключение видимости (htmx partial: карточка)
+POST   /lectures/{id}/retry      — повторная обработка (htmx partial: карточка)
+DELETE /lectures/{id}            — удаление (пустой 200, htmx удаляет DOM-узел)
+```
+
+Все маршруты работают под `auth.RequireAuth` (монтируется в `cmd/server`).
+CSRF-токен передаётся через `hx-headers={"X-CSRF-Token": "..."}` — Layout
+берёт значение из `web.LayoutData.CSRFToken`, которое хендлер заполняет через
+`web.CSRFTokenFromContext`.
 
 ## Точка входа `cmd/server`
 
@@ -397,5 +507,25 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
   `LoadSession`/`RequireAuth`, точка входа `cmd/server` с полной цепочкой
   инициализации, compile-time проверка `dbAdapter`. `make gate` зелёный.
 
-Впереди — волна C1 (доменные модули: upload, lecture, hub, reader, sync).
+**Волна C1 — начата.** Первый атом завершён:
+
+- **C1-lecture** — `internal/lecture` + расширение `internal/db` и `internal/web`:
+  доменный модуль «Мои лекции» готов. Типы `Lecture`/`Status`/`Visibility`,
+  интерфейсы `Repository` и `CoreTasks`, `Service` с методами
+  List/Rename/SetVisibility/Delete/Retry, все бизнес-правила (owner-проверка до
+  ядра, порядок delete, условия публикации/retry), HTTP-хендлеры ЛК под
+  `auth.RequireAuth`, страница `LecturesPage` + `LectureCard`, CSRF через
+  hx-headers. `make gate` зелёный.
+
+  **Известные ограничения (технический долг C1):**
+  - `cmd/server` использует `noopCoreTasks` — заглушку `lecture.CoreTasks`.
+    Удаление лекции работает (строка удаляется; ядро не вызывается — noop).
+    Retry возвращает «обработка временно недоступна» — честное поведение до
+    проводки реального `coreTasksAdapter` поверх `coreclient.CoreClient`.
+  - Отсутствует экран 502/503 при недоступности ядра.
+
+  Следующие атомы волны C1: **upload** (форма загрузки + presigned PUT),
+  **hub** (публичная витрина), **reader** (страница чтения конспекта),
+  **sync** (вебхук + поллинг, потребитель `UpdateStatusConditional`).
+
 Подробности — в `docs/WORKFLOW.md` и `docs/TASKS.md`.
