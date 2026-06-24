@@ -3,6 +3,7 @@ package upload
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 
@@ -29,8 +30,13 @@ func (s *Service) handlePresign(w http.ResponseWriter, r *http.Request) {
 		Size     int64  `json:"size"`
 		MIME     string `json:"mime"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+	dec := json.NewDecoder(r.Body)
+	if err := dec.Decode(&in); err != nil {
 		http.Error(w, "неверный запрос", http.StatusBadRequest)
+		return
+	}
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		http.Error(w, "invalid json", http.StatusBadRequest)
 		return
 	}
 
