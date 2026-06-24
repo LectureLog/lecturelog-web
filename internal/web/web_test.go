@@ -246,6 +246,38 @@ func TestRouter_ExistingRoutesUnchanged(t *testing.T) {
 	}
 }
 
+// ─── Тесты CSRF в layout ─────────────────────────────────────────────────────
+
+// TestLayout_CSRFHeader_Empty проверяет, что пустой токен даёт hx-headers="{}".
+// Обратная совместимость: существующие тесты используют пустую LayoutData.
+func TestLayout_CSRFHeader_Empty(t *testing.T) {
+	html := renderLayout(t, "Тест")
+
+	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами)
+	if !strings.Contains(html, `hx-headers="{}"`) {
+		t.Error("пустой CSRF-токен: ожидается hx-headers=\"{}\"")
+	}
+}
+
+// TestLayout_CSRFHeader_WithToken проверяет, что непустой токен попадает в hx-headers.
+func TestLayout_CSRFHeader_WithToken(t *testing.T) {
+	var b bytes.Buffer
+	data := web.LayoutData{Title: "Тест", CSRFToken: "test-csrf-token-123"}
+	err := web.Layout(data, nil).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("Layout.Render с CSRF-токеном: %v", err)
+	}
+	html := b.String()
+
+	// Токен должен появиться в hx-headers
+	if !strings.Contains(html, "test-csrf-token-123") {
+		t.Error("CSRF-токен не попал в hx-headers")
+	}
+	if !strings.Contains(html, "X-CSRF-Token") {
+		t.Error("ожидается заголовок X-CSRF-Token в hx-headers")
+	}
+}
+
 // ─── Тесты страницы лекций ────────────────────────────────────────────────────
 
 // renderLecturesPage — вспомогательная функция: рендерит LecturesPage в строку.
