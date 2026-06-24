@@ -24,6 +24,7 @@ type Signer struct {
 type tokenPayload struct {
 	UserID string `json:"user_id"`
 	S3Key  string `json:"s3_key"`
+	Media  string `json:"media"`
 	Exp    int64  `json:"exp"`
 }
 
@@ -34,10 +35,11 @@ func NewSigner(key []byte) *Signer {
 	}
 }
 
-func (s *Signer) Sign(userID, s3Key string, ttl time.Duration) string {
+func (s *Signer) Sign(userID, s3Key, media string, ttl time.Duration) string {
 	payload, err := json.Marshal(tokenPayload{
 		UserID: userID,
 		S3Key:  s3Key,
+		Media:  media,
 		Exp:    s.now().Add(ttl).Unix(),
 	})
 	if err != nil {
@@ -49,45 +51,45 @@ func (s *Signer) Sign(userID, s3Key string, ttl time.Duration) string {
 	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(mac)
 }
 
-func (s *Signer) Verify(token, expectedUserID, expectedS3Key string) error {
+func (s *Signer) Verify(token, expectedUserID, expectedS3Key string) (string, error) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 2 {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(parts[0])
 	if err != nil {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	gotMAC, err := base64.RawURLEncoding.DecodeString(parts[1])
 	if err != nil {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	wantMAC := signPayload(s.key, payload)
 	if !hmac.Equal(gotMAC, wantMAC) {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	var decoded tokenPayload
 	if err := json.Unmarshal(payload, &decoded); err != nil {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	if decoded.Exp == 0 {
-		return ErrBadToken
+		return "", ErrBadToken
 	}
 
 	if decoded.UserID != expectedUserID || decoded.S3Key != expectedS3Key {
-		return ErrTokenMismatch
+		return "", ErrTokenMismatch
 	}
 
 	if decoded.Exp <= s.now().Unix() {
-		return ErrTokenExpired
+		return "", ErrTokenExpired
 	}
 
-	return nil
+	return decoded.Media, nil
 }
 
 func signPayload(key, payload []byte) []byte {

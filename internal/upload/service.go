@@ -43,7 +43,6 @@ type ConfirmInput struct {
 	Token         string
 	S3Key         string
 	Title         string
-	Media         string
 	HasPDF        bool
 	ExtractSlides bool
 }
@@ -83,7 +82,7 @@ func (s *Service) PrepareFileUpload(ctx context.Context, userID, filename string
 	}
 
 	return PrepareResult{
-		Token:     s.signer.Sign(userID, res.Key, s.uploadTTL),
+		Token:     s.signer.Sign(userID, res.Key, media, s.uploadTTL),
 		PutURL:    res.URL,
 		S3Key:     res.Key,
 		Media:     media,
@@ -93,13 +92,14 @@ func (s *Service) PrepareFileUpload(ctx context.Context, userID, filename string
 }
 
 func (s *Service) ConfirmFileUpload(ctx context.Context, userID string, in ConfirmInput) (string, error) {
-	if err := s.signer.Verify(in.Token, userID, in.S3Key); err != nil {
+	media, err := s.signer.Verify(in.Token, userID, in.S3Key)
+	if err != nil {
 		return "", ErrForbidden
 	}
 
 	taskID, err := s.core.CreateTask(ctx, coreclient.CreateTaskParams{
 		S3Key:    in.S3Key,
-		Media:    in.Media,
+		Media:    media,
 		NoSlides: noSlides(in.HasPDF, in.ExtractSlides),
 	})
 	if err != nil {
@@ -109,7 +109,7 @@ func (s *Service) ConfirmFileUpload(ctx context.Context, userID string, in Confi
 	return s.repo.CreateLecture(ctx, CreateLectureParams{
 		OwnerID:    userID,
 		Title:      in.Title,
-		SourceKind: in.Media,
+		SourceKind: media,
 		S3Key:      in.S3Key,
 		CoreTaskID: taskID,
 	})
