@@ -51,11 +51,15 @@ GATE C0: миграции применяются; layout рендерится в
 | C0-config | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (gofmt) | ✅ в integration (bb819d3) | ✅ |
 | C0-db     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 1 круг (go mod tidy) | ✅ в integration (00025c7) | ✅ |
 | C0-web    | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 круга (детерминизм templ; чистка config+focus) | ✅ в integration (08cdb4c) | ✅ |
-| C0-auth   | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE (security-разбор, дыр нет) | ✅ 1 круг (финал app.css + gofmt) | ✅ в integration (ce3e498) | ⏳ DOCS НЕ сделан (лимит) |
+| C0-auth   | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE (security-разбор, дыр нет) | ✅ 1 круг (финал app.css + gofmt) | ✅ в integration (ce3e498) | ✅ (коммит 0507824) |
 
-## ВОЛНА C0 ЗАВЕРШЕНА (все 4 атома в integration, ce3e498). Ворота зелёные, дерево чисто.
-ОСТАЛОСЬ по C0 (для след. вызова): (1) DOCS C0-auth — README про internal/auth+cmd/server
-(НЕ сделан из-за лимитов); (2) КОНЕЦ ВОЛНЫ: push integration на origin + PR (политика владельца).
+## ВОЛНА C0 ПОЛНОСТЬЮ ЗАВЕРШЕНА И ОПУБЛИКОВАНА (2026-06-24).
+- DOCS C0-auth: README про internal/auth+cmd/server — СДЕЛАН (коммит 0507824, docs-субагент).
+- КОНЕЦ ВОЛНЫ: integration ЗАПУШЕН на origin (2ef594f..0507824). Локальная и
+  origin/integration синхронны (0/0). Ворота зелёные, дерево чисто.
+- PR: владелец решил (2026-06-24) НЕ создавать PR сейчас — накапливать в integration
+  до конца волны C1, PR в main позже. Это уточняет раннюю формулировку «push + PR в конце C0».
+- СЛЕДУЮЩЕЕ: волна C1 (доменные модули upload/lecture/hub/reader/sync). См. TASKS.md §C1.
 
 ## ИЗМЕНЕНИЕ MERGE-ПОЛИТИКИ (решение владельца 2026-06-23)
 Атомы C0 **мержатся в локальную integration сразу** (--no-ff, без PR на каждый).

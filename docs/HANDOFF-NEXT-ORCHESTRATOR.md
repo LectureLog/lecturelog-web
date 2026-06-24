@@ -15,19 +15,17 @@
 ПЕРВЫМ делом прочитай: `docs/HANDOFF-C0.md` (состояние волны C0 — ЗАВЕРШЕНА),
 этот файл целиком, `docs/WORKFLOW.md`, `docs/TASKS.md`, `docs/plans/2026-06-22-platform-design.md`.
 
-СОСТОЯНИЕ: волна C0 (фундамент) ЗАВЕРШЕНА — все 4 атома (config, db, web, auth) приняты
-(ACCEPT=COMPLETE + REVIEW=APPROVE) и смержены в ЛОКАЛЬНУЮ `integration` (коммит ce3e498+).
-Ворота зелёные, дерево чисто, worktree-ы убраны. origin НЕ обновлён.
+СОСТОЯНИЕ: волна C0 (фундамент) ПОЛНОСТЬЮ ЗАВЕРШЕНА И ОПУБЛИКОВАНА (2026-06-24).
+Все 4 атома (config, db, web, auth) + cmd/server приняты (ACCEPT=COMPLETE + REVIEW=APPROVE)
+и смержены в `integration`. DOCS C0-auth сделан (коммит 0507824). integration ЗАПУШЕН на
+origin (2ef594f..0507824), локальная и origin/integration синхронны (0/0). Ворота зелёные,
+дерево чисто, worktree-ы убраны. Хвост C0 ЗАКРЫТ.
 
-ПЕРВЫЕ ДЕЙСТВИЯ (закрыть хвост C0):
-1. **DOCS C0-auth** — отдельным docs-субагентом обнови README про `internal/auth` + `cmd/server`
-   (этот шаг НЕ был сделан из-за лимитов; контекст изменений — в HANDOFF-C0.md раздел «C0-auth — итог»).
-2. **Конец волны C0** — по решению владельца: push `integration` на origin + ОДИН PR
-   (integration → ... — уточни у владельца целевую ветку/смысл PR; B1 был PR в integration,
-   но теперь атомы уже в integration, значит PR, вероятно, integration→main в конце волны.
-   СПРОСИ владельца перед push — это первый публичный push волны).
-3. **Затем волна C1** — доменные модули (5 ∥-задач: upload, lecture, hub, reader, sync).
-   Vertical slices, у каждой свой прототип в `design/prototypes/`. См. TASKS.md §C1 и долги C1 ниже.
+РЕШЕНИЕ ВЛАДЕЛЬЦА (2026-06-24): PR сейчас НЕ создаём — накапливаем в integration до конца
+волны C1, PR в main позже. (Уточняет раннюю формулировку «push + PR в конце C0».)
+
+ПЕРВОЕ ДЕЙСТВИЕ: **волна C1** — доменные модули (5 ∥-задач: upload, lecture, hub, reader, sync).
+Vertical slices, у каждой свой прототип в `design/prototypes/`. См. TASKS.md §C1 и долги C1 ниже.
 
 ПОЛИТИКА ВЛАДЕЛЬЦА (НЕ переоткрывать):
 - Мержи готовые атомы в ЛОКАЛЬНУЮ integration СРАЗУ (--no-ff, без PR на каждый атом).
