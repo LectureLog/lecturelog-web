@@ -4,8 +4,8 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +21,12 @@ type Signer struct {
 	now func() time.Time
 }
 
+type tokenPayload struct {
+	UserID string `json:"user_id"`
+	S3Key  string `json:"s3_key"`
+	Exp    int64  `json:"exp"`
+}
+
 func NewSigner(key []byte) *Signer {
 	return &Signer{
 		key: key,
@@ -29,11 +35,18 @@ func NewSigner(key []byte) *Signer {
 }
 
 func (s *Signer) Sign(userID, s3Key string, ttl time.Duration) string {
-	exp := s.now().Add(ttl).Unix()
-	payload := strings.Join([]string{userID, s3Key, strconv.FormatInt(exp, 10)}, "|")
-	mac := signPayload(s.key, []byte(payload))
+	payload, err := json.Marshal(tokenPayload{
+		UserID: userID,
+		S3Key:  s3Key,
+		Exp:    s.now().Add(ttl).Unix(),
+	})
+	if err != nil {
+		return ""
+	}
 
-	return base64.RawURLEncoding.EncodeToString([]byte(payload)) + "." + base64.RawURLEncoding.EncodeToString(mac)
+	mac := signPayload(s.key, payload)
+
+	return base64.RawURLEncoding.EncodeToString(payload) + "." + base64.RawURLEncoding.EncodeToString(mac)
 }
 
 func (s *Signer) Verify(token, expectedUserID, expectedS3Key string) error {
@@ -57,21 +70,20 @@ func (s *Signer) Verify(token, expectedUserID, expectedS3Key string) error {
 		return ErrBadToken
 	}
 
-	payloadParts := strings.SplitN(string(payload), "|", 3)
-	if len(payloadParts) != 3 {
+	var decoded tokenPayload
+	if err := json.Unmarshal(payload, &decoded); err != nil {
 		return ErrBadToken
 	}
 
-	exp, err := strconv.ParseInt(payloadParts[2], 10, 64)
-	if err != nil {
+	if decoded.Exp == 0 {
 		return ErrBadToken
 	}
 
-	if payloadParts[0] != expectedUserID || payloadParts[1] != expectedS3Key {
+	if decoded.UserID != expectedUserID || decoded.S3Key != expectedS3Key {
 		return ErrTokenMismatch
 	}
 
-	if exp <= s.now().Unix() {
+	if decoded.Exp <= s.now().Unix() {
 		return ErrTokenExpired
 	}
 
