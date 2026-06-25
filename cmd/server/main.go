@@ -164,9 +164,12 @@ func main() {
 	// Создаём auth.Service
 	authSvc := auth.NewService(repo, provider, cfg.SessionTTL, secureCookies)
 
+	// Единый экземпляр db.LectureDB используется обоими адаптерами (lectureRepo и uploadRepo)
+	lectureDB := &db.LectureDB{Pool: pool}
+
 	// Инициализируем lecture.Service с адаптерами БД и ядра.
 	lectureSvc := lecture.NewService(
-		&lectureRepo{lectures: &db.LectureDB{Pool: pool}},
+		&lectureRepo{lectures: lectureDB},
 		&coreTasksAdapter{core: core},
 	)
 
@@ -190,7 +193,8 @@ func main() {
 	signer := upload.NewSigner(uploadSignKey)
 
 	// Создаём upload.Service: обрабатывает presign / confirm / youtube
-	uploadSvc := upload.NewService(core, &uploadRepo{lectures: &db.LectureDB{Pool: pool}}, signer, cfg.PresignedTTL)
+	upRepo := &uploadRepo{lectures: lectureDB}
+	uploadSvc := upload.NewService(core, upRepo, signer, cfg.PresignedTTL)
 
 	// gorilla/csrf middleware: токен из контекста (csrf.Token(r)) → templ-формы через hx-headers.
 	// X-CSRF-Token — заголовок для htmx (hx-headers={"X-CSRF-Token": "..."}).
