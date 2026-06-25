@@ -20,6 +20,7 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/db"
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
+	"github.com/LectureLog/lecturelog-web/internal/upload"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 
 	"github.com/go-chi/chi/v5"
@@ -177,6 +178,20 @@ func main() {
 		log.Fatalf("генерация CSRF-ключа: %v", err)
 	}
 
+	// Ключ подписи presigned-токенов загрузки генерируется на старте (32 случайных байта).
+	// ДОЛГ: рестарт сервера инвалидирует незавершённые presign-токены;
+	// стабильный ключ из env (PLATFORM_UPLOAD_SIGN_KEY) — долг (как у csrfKey).
+	uploadSignKey := make([]byte, 32)
+	if _, err := rand.Read(uploadSignKey); err != nil {
+		log.Fatalf("генерация ключа подписи upload: %v", err)
+	}
+
+	// Создаём signer для подписи и верификации presigned-токенов загрузки
+	signer := upload.NewSigner(uploadSignKey)
+
+	// Создаём upload.Service: обрабатывает presign / confirm / youtube
+	uploadSvc := upload.NewService(core, &uploadRepo{lectures: &db.LectureDB{Pool: pool}}, signer, cfg.PresignedTTL)
+
 	// gorilla/csrf middleware: токен из контекста (csrf.Token(r)) → templ-формы через hx-headers.
 	// X-CSRF-Token — заголовок для htmx (hx-headers={"X-CSRF-Token": "..."}).
 	csrfMiddleware := csrf.Protect(
@@ -210,6 +225,7 @@ func main() {
 			r.Group(func(pr chi.Router) {
 				pr.Use(authSvc.RequireAuth)
 				lectureSvc.Mount(pr) // GET /lectures, POST /lectures/{id}/*
+				uploadSvc.Mount(pr)  // POST /upload/presign, /upload/confirm, /upload/youtube
 			})
 		}),
 	)
@@ -324,3 +340,31 @@ var _ lecture.CoreTasks = (*coreTasksAdapter)(nil)
 
 // _ — проверка на этапе компиляции: dbAdapter реализует auth.Repository.
 var _ auth.Repository = (*dbAdapter)(nil)
+
+// ─── Адаптер для upload.Repository ──────────────────────────────────────────
+
+// uploadRepo реализует upload.Repository поверх db.LectureDB.
+// db не знает про upload (нет импорта upload→db), upload не знает про pgx.
+// Связка происходит здесь, в cmd/server.
+type uploadRepo struct {
+	lectures *db.LectureDB
+}
+
+// CreateLecture создаёт запись лекции в БД и возвращает её ID.
+func (r *uploadRepo) CreateLecture(ctx context.Context, p upload.CreateLectureParams) (string, error) {
+	row, err := r.lectures.CreateLecture(ctx, db.CreateLectureParams{
+		OwnerID:    p.OwnerID,
+		Title:      p.Title,
+		SourceKind: p.SourceKind,
+		CoreTaskID: p.CoreTaskID,
+		S3Key:      p.S3Key,
+		VideoURL:   p.VideoURL,
+	})
+	if err != nil {
+		return "", err
+	}
+	return row.LectureID, nil
+}
+
+// _ — проверка на этапе компиляции: uploadRepo реализует upload.Repository.
+var _ upload.Repository = (*uploadRepo)(nil)
