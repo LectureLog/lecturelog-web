@@ -1,0 +1,157 @@
+package web
+
+// UploadPage — страница загрузки новой лекции.
+// Файл-режим обрабатывается upload.js, URL-режим отправляется через htmx.
+templ UploadPage(data LayoutData) {
+	@Layout(data, nil) {
+		<section id="ll-upload" class="ll-upload" data-csrf={ data.CSRFToken }>
+			<div class="ll-upload-head">
+				<div class="ll-upload-kicker">Загрузка лекции</div>
+				<h1 class="ll-upload-title">Новый конспект</h1>
+				<p class="ll-upload-dek">Загрузите запись лекции — мы расшифруем её, разобьём по темам и соберём структурированный конспект с тайм-кодами и слайдами.</p>
+			</div>
+			<div class="ll-upload-seg" role="tablist" aria-label="Способ загрузки">
+				<button class="ll-upload-seg-btn ll-upload-seg-btn--active" type="button" data-mode="file" role="tab" aria-selected="true" aria-controls="ll-upload-file-panel">
+					@iconUploadFile()
+					<span>Файл</span>
+				</button>
+				<button class="ll-upload-seg-btn" type="button" data-mode="url" role="tab" aria-selected="false" aria-controls="ll-upload-url-panel">
+					@iconUploadLink()
+					<span>Ссылка</span>
+				</button>
+			</div>
+			<div id="ll-upload-file-panel" class="ll-upload-panel" data-panel="file">
+				<div class="ll-upload-drop" data-drop>
+					<div class="ll-upload-drop-empty" data-drop-empty>
+						<div class="ll-upload-drop-icon">
+							@iconUploadArrow()
+						</div>
+						<p class="ll-upload-drop-title">Перетащите файл сюда</p>
+						<p class="ll-upload-drop-sub">или выберите на устройстве</p>
+						<button class="ll-upload-pick" type="button" data-pick-file>
+							@iconUploadFile()
+							<span>Выбрать файл</span>
+						</button>
+						<p class="ll-upload-formats">MP4 · MOV · MP3 · WAV · M4A — до 2 ГБ</p>
+					</div>
+					<div class="ll-upload-file ll-upload-hidden" data-file-card>
+						<span class="ll-upload-file-icon">
+							@iconUploadMedia()
+						</span>
+						<div class="ll-upload-file-meta">
+							<div class="ll-upload-file-name" data-file-name></div>
+							<div class="ll-upload-file-sub" data-file-sub></div>
+							<div class="ll-upload-file-bar" aria-hidden="true"><i></i></div>
+						</div>
+						<button class="ll-upload-file-remove" type="button" data-clear-file aria-label="Убрать файл">
+							@iconUploadX()
+						</button>
+					</div>
+				</div>
+				<div class="ll-upload-errnote" data-error role="alert" aria-live="polite"></div>
+				<div class="ll-upload-options">
+					<label class="ll-upload-check">
+						<input type="checkbox" name="has_pdf" data-has-pdf/>
+						<span class="ll-upload-check-box" aria-hidden="true"></span>
+						<span>
+							<span class="ll-upload-opt-title">Есть PDF со слайдами</span>
+							<span class="ll-upload-opt-text">Не извлекать слайды из видео, если презентация уже есть отдельно.</span>
+						</span>
+					</label>
+					<label class="ll-upload-switch-row">
+						<span>
+							<span class="ll-upload-opt-title">Извлекать слайды из видео</span>
+							<span class="ll-upload-opt-text">Найдём кадры со слайдами и вставим их в нужные подтемы конспекта.</span>
+						</span>
+						<input class="ll-upload-switch-input" type="checkbox" name="extract_slides" data-extract-slides checked/>
+						<span class="ll-upload-switch" aria-hidden="true"></span>
+					</label>
+				</div>
+				<div class="ll-upload-cta-row">
+					<button class="ll-upload-cta" type="button" data-file-submit disabled>
+						@iconUploadPlay()
+						<span data-submit-label>Сгенерировать конспект</span>
+					</button>
+					<span class="ll-upload-cta-note" data-status>Обработка часовой лекции занимает ~3–5 минут.</span>
+				</div>
+			</div>
+			<form id="ll-upload-url-panel" class="ll-upload-panel ll-upload-hidden" data-panel="url" hx-post="/upload/youtube" hx-swap="none" method="post">
+				<label class="ll-upload-url-field">
+					@iconUploadLink()
+					<input type="url" name="url" placeholder="Вставьте ссылку на YouTube или прямой URL записи" autocomplete="off" required data-url-input/>
+				</label>
+				<p class="ll-upload-url-hint">Поддерживаются YouTube и прямые ссылки на аудио/видео.</p>
+				<div class="ll-upload-options">
+					<label class="ll-upload-check">
+						<input type="checkbox" name="has_pdf" data-has-pdf/>
+						<span class="ll-upload-check-box" aria-hidden="true"></span>
+						<span>
+							<span class="ll-upload-opt-title">Есть PDF со слайдами</span>
+							<span class="ll-upload-opt-text">Не извлекать слайды из видео, если презентация уже есть отдельно.</span>
+						</span>
+					</label>
+					<label class="ll-upload-switch-row">
+						<span>
+							<span class="ll-upload-opt-title">Извлекать слайды из видео</span>
+							<span class="ll-upload-opt-text">Найдём кадры со слайдами и вставим их в нужные подтемы конспекта.</span>
+						</span>
+						<input class="ll-upload-switch-input" type="checkbox" name="extract_slides" data-extract-slides checked/>
+						<span class="ll-upload-switch" aria-hidden="true"></span>
+					</label>
+				</div>
+				<div class="ll-upload-cta-row">
+					<button class="ll-upload-cta" type="submit">
+						@iconUploadPlay()
+						<span>Сгенерировать конспект</span>
+					</button>
+					<span class="ll-upload-cta-note">Обработка начнётся сразу после проверки ссылки.</span>
+				</div>
+			</form>
+			<input class="ll-upload-hidden" type="file" accept="video/*,audio/*,.mp4,.mov,.mp3,.wav,.m4a" data-file-input/>
+		</section>
+		<script src="/static/js/upload.js" defer></script>
+	}
+}
+
+templ iconUploadFile() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M14 3v5h5"></path>
+		<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path>
+	</svg>
+}
+
+templ iconUploadLink() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"></path>
+		<path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"></path>
+	</svg>
+}
+
+templ iconUploadArrow() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M12 16V4"></path>
+		<path d="M12 4 7 9"></path>
+		<path d="m12 4 5 5"></path>
+		<path d="M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"></path>
+	</svg>
+}
+
+templ iconUploadMedia() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<rect x="3" y="5" width="18" height="14" rx="2"></rect>
+		<path d="m10 9 5 3-5 3z" fill="currentColor" stroke="none"></path>
+	</svg>
+}
+
+templ iconUploadX() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M6 6l12 12"></path>
+		<path d="M18 6 6 18"></path>
+	</svg>
+}
+
+templ iconUploadPlay() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="m5 3 14 9-14 9z" fill="currentColor" stroke="none"></path>
+	</svg>
+}

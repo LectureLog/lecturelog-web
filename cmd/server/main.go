@@ -229,7 +229,20 @@ func main() {
 			r.Group(func(pr chi.Router) {
 				pr.Use(authSvc.RequireAuth)
 				lectureSvc.Mount(pr) // GET /lectures, POST /lectures/{id}/*
-				uploadSvc.Mount(pr)  // POST /upload/presign, /upload/confirm, /upload/youtube
+				pr.Get("/upload", func(w http.ResponseWriter, r *http.Request) {
+					user := auth.UserFromContext(r.Context())
+					if user == nil {
+						http.Error(w, "unauthorized", http.StatusUnauthorized)
+						return
+					}
+					token := web.CSRFTokenFromContext(r.Context())
+					data := web.LayoutData{Title: "Новый конспект", CSRFToken: token}
+					if err := web.UploadPage(data).Render(r.Context(), w); err != nil {
+						http.Error(w, "render upload page", http.StatusInternalServerError)
+						return
+					}
+				})
+				uploadSvc.Mount(pr) // POST /upload/presign, /upload/confirm, /upload/youtube
 			})
 		}),
 	)
