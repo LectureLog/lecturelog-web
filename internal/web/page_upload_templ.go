@@ -56,7 +56,7 @@ func UploadPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><div class=\"ll-upload-head\"><div class=\"ll-upload-kicker\">Загрузка лекции</div><h1 class=\"ll-upload-title\">Новый конспект</h1><p class=\"ll-upload-dek\">Загрузите запись лекции — мы расшифруем её, разобьём по темам и соберём структурированный конспект с тайм-кодами и слайдами.</p></div><div class=\"ll-upload-seg\" role=\"tablist\" aria-label=\"Способ загрузки\"><button class=\"ll-upload-seg-btn ll-upload-seg-btn--active\" type=\"button\" data-mode=\"file\" role=\"tab\" aria-selected=\"true\" aria-controls=\"ll-upload-file-panel\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, "\"><div class=\"ll-upload-head\"><div class=\"ll-upload-kicker\">Загрузка лекции</div><h1 class=\"ll-upload-title\">Новый конспект</h1><p class=\"ll-upload-dek\">Загрузите запись лекции — мы расшифруем её, разобьём по темам и соберём структурированный конспект с тайм-кодами и слайдами.</p></div><div class=\"ll-upload-seg\" aria-label=\"Способ загрузки\"><button class=\"ll-upload-seg-btn ll-upload-seg-btn--active\" type=\"button\" data-mode=\"file\" aria-selected=\"true\" aria-controls=\"ll-upload-file-panel\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -64,7 +64,7 @@ func UploadPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<span>Файл</span></button> <button class=\"ll-upload-seg-btn\" type=\"button\" data-mode=\"url\" role=\"tab\" aria-selected=\"false\" aria-controls=\"ll-upload-url-panel\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 3, "<span>Файл</span></button> <button class=\"ll-upload-seg-btn\" type=\"button\" data-mode=\"url\" aria-selected=\"false\" aria-controls=\"ll-upload-url-panel\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -120,7 +120,7 @@ func UploadPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<input type=\"url\" name=\"url\" placeholder=\"Вставьте ссылку на YouTube или прямой URL записи\" autocomplete=\"off\" required data-url-input></label><p class=\"ll-upload-url-hint\">Поддерживаются YouTube и прямые ссылки на аудио/видео.</p><div class=\"ll-upload-options\"><label class=\"ll-upload-check\"><input type=\"checkbox\" name=\"has_pdf\" data-has-pdf> <span class=\"ll-upload-check-box\" aria-hidden=\"true\"></span> <span><span class=\"ll-upload-opt-title\">Есть PDF со слайдами</span> <span class=\"ll-upload-opt-text\">Не извлекать слайды из видео, если презентация уже есть отдельно.</span></span></label> <label class=\"ll-upload-switch-row\"><span><span class=\"ll-upload-opt-title\">Извлекать слайды из видео</span> <span class=\"ll-upload-opt-text\">Найдём кадры со слайдами и вставим их в нужные подтемы конспекта.</span></span> <input class=\"ll-upload-switch-input\" type=\"checkbox\" name=\"extract_slides\" data-extract-slides checked> <span class=\"ll-upload-switch\" aria-hidden=\"true\"></span></label></div><div class=\"ll-upload-cta-row\"><button class=\"ll-upload-cta\" type=\"submit\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "<input type=\"url\" name=\"url\" placeholder=\"Вставьте ссылку на YouTube или прямой URL записи\" autocomplete=\"off\" required data-url-input></label><p class=\"ll-upload-url-hint\">Поддерживаются YouTube и прямые ссылки на аудио/видео.</p><div class=\"ll-upload-options\"><label class=\"ll-upload-check\"><input type=\"checkbox\" name=\"has_pdf\" data-has-pdf> <span class=\"ll-upload-check-box\" aria-hidden=\"true\"></span> <span><span class=\"ll-upload-opt-title\">Есть PDF со слайдами</span> <span class=\"ll-upload-opt-text\">Не извлекать слайды из видео, если презентация уже есть отдельно.</span></span></label> <label class=\"ll-upload-switch-row\"><span><span class=\"ll-upload-opt-title\">Извлекать слайды из видео</span> <span class=\"ll-upload-opt-text\">Найдём кадры со слайдами и вставим их в нужные подтемы конспекта.</span></span> <input class=\"ll-upload-switch-input\" type=\"checkbox\" name=\"extract_slides\" data-extract-slides checked> <span class=\"ll-upload-switch\" aria-hidden=\"true\"></span></label></div><div class=\"ll-upload-cta-row\"><button class=\"ll-upload-cta\" type=\"submit\" hx-disabled-elt=\"this\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

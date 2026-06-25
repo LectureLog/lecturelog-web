@@ -26,7 +26,7 @@
     var hasPDFInputs = Array.prototype.slice.call(root.querySelectorAll('[data-has-pdf]'));
     var extractInputs = Array.prototype.slice.call(root.querySelectorAll('[data-extract-slides]'));
     var selectedFile = null;
-    var selectedTitle = '';
+    var isSubmitting = false;
     var dragDepth = 0;
     var defaultSubmitText = submitLabel ? submitLabel.textContent : '';
     var defaultStatusText = status ? status.textContent : '';
@@ -90,7 +90,7 @@
 
     function resetSubmit() {
       if (fileSubmit) {
-        fileSubmit.disabled = !selectedFile;
+        fileSubmit.disabled = isSubmitting || !selectedFile;
       }
       if (submitLabel) {
         submitLabel.textContent = defaultSubmitText;
@@ -113,8 +113,10 @@
     }
 
     function showFile(file) {
+      if (isSubmitting) {
+        return;
+      }
       selectedFile = file;
-      selectedTitle = '';
       clearError();
       if (fileName) {
         fileName.textContent = file.name;
@@ -134,8 +136,10 @@
     }
 
     function resetFile() {
+      if (isSubmitting) {
+        return;
+      }
       selectedFile = null;
-      selectedTitle = '';
       clearError();
       if (dropEmpty) {
         dropEmpty.classList.remove('ll-upload-hidden');
@@ -150,6 +154,9 @@
     }
 
     function takeFile(file) {
+      if (isSubmitting) {
+        return;
+      }
       if (!file) {
         return;
       }
@@ -204,18 +211,25 @@
     }
 
     function submitFile() {
-      if (!selectedFile) {
+      if (isSubmitting) {
+        return;
+      }
+
+      var file = selectedFile;
+      if (!file) {
         showError('Выберите аудио- или видеофайл.');
         return;
       }
 
+      isSubmitting = true;
       clearError();
       setBusy('Загрузка…', 'Получаем ссылку для загрузки.');
 
-      var mime = selectedFile.type || 'application/octet-stream';
+      var mime = file.type || 'application/octet-stream';
+      var title = file.name;
       postJSON('/upload/presign', {
-        filename: selectedFile.name,
-        size: selectedFile.size,
+        filename: file.name,
+        size: file.size,
         mime: mime
       }).then(function (res) {
         if (!res.ok) {
@@ -225,7 +239,7 @@
         }
         return res.json();
       }).then(function (presign) {
-        selectedTitle = presign.title || selectedFile.name;
+        title = presign.title || file.name;
         setBusy('Загрузка…', 'Передаём файл в хранилище.');
         return fetch(presign.put_url, {
           method: 'PUT',
@@ -233,7 +247,7 @@
           headers: {
             'Content-Type': mime
           },
-          body: selectedFile
+          body: file
         }).then(function (res) {
           if (!res.ok) {
             throw new Error('Не удалось загрузить файл. Попробуйте ещё раз.');
@@ -246,7 +260,7 @@
         return postForm('/upload/confirm', {
           token: presign.token || '',
           s3_key: presign.s3_key || '',
-          title: selectedTitle,
+          title: title,
           has_pdf: opts.hasPDF ? 'true' : '',
           extract_slides: opts.extractSlides ? 'true' : ''
         });
@@ -259,6 +273,8 @@
         window.location.assign(res.headers.get('HX-Redirect') || '/lectures');
       }).catch(function (err) {
         showError(err.message || 'Не удалось загрузить файл.');
+      }).finally(function () {
+        isSubmitting = false;
         resetSubmit();
       });
     }
@@ -292,6 +308,9 @@
 
     if (pickFile && fileInput) {
       pickFile.addEventListener('click', function () {
+        if (isSubmitting) {
+          return;
+        }
         fileInput.click();
       });
       fileInput.addEventListener('change', function () {
@@ -310,6 +329,9 @@
           if (eventName === 'dragenter') {
             dragDepth += 1;
           }
+          if (isSubmitting) {
+            return;
+          }
           drop.classList.add('ll-upload-drop--over');
         });
       });
@@ -323,6 +345,11 @@
       });
       drop.addEventListener('drop', function (event) {
         event.preventDefault();
+        if (isSubmitting) {
+          dragDepth = 0;
+          drop.classList.remove('ll-upload-drop--over');
+          return;
+        }
         dragDepth = 0;
         drop.classList.remove('ll-upload-drop--over');
         takeFile(event.dataTransfer.files && event.dataTransfer.files[0]);

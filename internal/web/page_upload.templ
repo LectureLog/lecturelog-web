@@ -10,12 +10,12 @@ templ UploadPage(data LayoutData) {
 				<h1 class="ll-upload-title">Новый конспект</h1>
 				<p class="ll-upload-dek">Загрузите запись лекции — мы расшифруем её, разобьём по темам и соберём структурированный конспект с тайм-кодами и слайдами.</p>
 			</div>
-			<div class="ll-upload-seg" role="tablist" aria-label="Способ загрузки">
-				<button class="ll-upload-seg-btn ll-upload-seg-btn--active" type="button" data-mode="file" role="tab" aria-selected="true" aria-controls="ll-upload-file-panel">
+			<div class="ll-upload-seg" aria-label="Способ загрузки">
+				<button class="ll-upload-seg-btn ll-upload-seg-btn--active" type="button" data-mode="file" aria-selected="true" aria-controls="ll-upload-file-panel">
 					@iconUploadFile()
 					<span>Файл</span>
 				</button>
-				<button class="ll-upload-seg-btn" type="button" data-mode="url" role="tab" aria-selected="false" aria-controls="ll-upload-url-panel">
+				<button class="ll-upload-seg-btn" type="button" data-mode="url" aria-selected="false" aria-controls="ll-upload-url-panel">
 					@iconUploadLink()
 					<span>Ссылка</span>
 				</button>
@@ -100,7 +100,7 @@ templ UploadPage(data LayoutData) {
 					</label>
 				</div>
 				<div class="ll-upload-cta-row">
-					<button class="ll-upload-cta" type="submit">
+					<button class="ll-upload-cta" type="submit" hx-disabled-elt="this">
 						@iconUploadPlay()
 						<span>Сгенерировать конспект</span>
 					</button>
