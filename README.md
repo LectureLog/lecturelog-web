@@ -393,12 +393,169 @@ CSRF-токен передаётся через `hx-headers={"X-CSRF-Token": "..
 берёт значение из `web.LayoutData.CSRFToken`, которое хендлер заполняет через
 `web.CSRFTokenFromContext`.
 
+## Пакет `internal/upload`
+
+Доменный модуль загрузки лекций: валидация файла, получение presigned-URL у ядра,
+HMAC-токен незавершённой загрузки, создание задачи и строки лекции.
+
+**Ключевые типы:**
+
+| Тип | Роль |
+|---|---|
+| `Service` | Центральный сервис; содержит `Core`, `Repository`, `Signer` |
+| `Core` | Интерфейс к ядру: `CreateUpload` + `CreateTask` |
+| `Repository` | Интерфейс БД: `CreateLecture` |
+| `Signer` | HMAC-подписчик/верификатор stateless-токена незавершённой загрузки |
+| `PrepareResult` | Ответ presign: `Token`, `PutURL`, `S3Key`, `Media`, `Title`, `ExpiresIn` |
+| `ConfirmInput` | Форма подтверждения: `Token`, `S3Key`, `Title`, `HasPDF`, `ExtractSlides` |
+| `YouTubeInput` | Форма YouTube: `URL`, `Title`, `HasPDF`, `ExtractSlides` |
+| `CreateLectureParams` | Параметры новой строки лекции в БД |
+
+**Конструктор:**
+
+```go
+upload.NewService(core Core, repo Repository, signer *Signer, uploadTTL time.Duration) *Service
+```
+
+**Методы Service:**
+
+| Метод | Описание |
+|---|---|
+| `PrepareFileUpload(ctx, userID, filename, size, mime)` | Валидирует мета-данные файла, запрашивает у ядра presigned-PUT URL, возвращает HMAC-токен |
+| `ConfirmFileUpload(ctx, userID, ConfirmInput)` | Верифицирует токен, создаёт задачу в ядре, сохраняет лекцию в БД |
+| `CreateYouTube(ctx, userID, YouTubeInput)` | Валидирует YouTube-URL, создаёт задачу в ядре, сохраняет лекцию в БД |
+
+**HTTP-хендлеры (`Service.Mount`):**
+
+```
+GET  /upload              — страница формы загрузки (templ, режим Файл/Ссылка,
+                            drop-зона, опции has_pdf / extract_slides, заголовок)
+POST /upload/presign      — JSON {filename, size, mime} → {token, put_url, s3_key,
+                            media, title, expires_in}
+POST /upload/confirm      — form {token, s3_key, title, has_pdf, extract_slides}
+                            → задача в ядре + строка лекции; HX-Redirect: /lectures
+POST /upload/youtube      — form {url, title, has_pdf, extract_slides}
+                            → то же для YouTube-URL; HX-Redirect: /lectures
+```
+
+`GET /upload` смонтирован напрямую в `cmd/server` под `RequireAuth`; три мутирующих
+маршрута — через `uploadSvc.Mount`.
+
+**Клиентский поток загрузки файла** (`internal/web/static/js/upload.js`):
+
+1. JS отправляет `POST /upload/presign` с `{filename, size, mime}`.
+2. Получает `{token, put_url, s3_key, …}`, выполняет прямой `PUT` файла в MinIO
+   по `put_url` (минуя сервер платформы).
+3. Отправляет `POST /upload/confirm` с `{token, s3_key, title, …}`.
+4. Сервер отвечает `HX-Redirect: /lectures` — htmx выполняет полную навигацию.
+
+Guard от двойного сабмита блокирует повторную отправку до завершения потока.
+CSRF-токен передаётся через `data`-атрибут формы.
+
+**HMAC-токен (`Signer`).** Stateless-токен связывает userID + s3_key + media +
+срок действия. Кодируется как `base64url(payload).base64url(hmac-sha256)`.
+Верификация: constant-time `hmac.Equal`, проверка владельца, проверка срока.
+
+**Валидация (`validate.go`):**
+
+- Поддерживаемые расширения: `.mp4`, `.mov`, `.mkv`, `.webm`, `.avi` (video);
+  `.mp3`, `.wav`, `.m4a`, `.aac`, `.ogg`, `.flac` (audio).
+- MIME от клиента — недоверенный; пустой MIME допускается.
+- Лимит размера файла: 5 ГБ (бета-потолок).
+- YouTube-URL: только `youtube.com`, `www.youtube.com`, `youtu.be`, `m.youtube.com`.
+
+**Доменные ошибки:**
+
+| Константа | Значение |
+|---|---|
+| `ErrUnsupportedMedia` | Неподдерживаемый тип медиа |
+| `ErrEmptyFile` | Пустой файл (size ≤ 0) |
+| `ErrTooLarge` | Файл превышает лимит |
+| `ErrEmptyFilename` | Пустое имя файла |
+| `ErrMediaMismatch` | MIME-тип не совпадает с расширением файла |
+| `ErrInvalidURL` | Некорректная или не-YouTube ссылка |
+| `ErrForbidden` | Токен не принадлежит пользователю или истёк |
+
+**Известные ограничения (технический долг):**
+
+- PDF-слайды (`has_pdf`) пока не передаются в ядро — проброс файла отдельный
+  атом. `has_pdf=true` только включает `no_slides=true` в задаче ядра (отключает
+  извлечение слайдов из видео) и гасит тумблер `extract_slides`.
+- Прямые (не-YouTube) медиа-URL не поддержаны.
+- `uploadSignKey` генерируется при каждом старте — рестарт сервера инвалидирует
+  все незавершённые presign-токены (приемлемо для беты).
+
+## Пакет `internal/syncsvc`
+
+Доменный модуль синхронизации статуса лекции с ядром: приём подписанного вебхука
+и поллинг-прокси статуса задачи.
+
+**Ключевые типы:**
+
+| Тип | Роль |
+|---|---|
+| `Service` | Центральный сервис; содержит `Repository`, `CoreStatus`, `webhookSecret` |
+| `Repository` | Узкий порт БД: `UpdateStatusConditional` + `FindByID` |
+| `CoreStatus` | Узкий порт ядра: `GetTaskStatus` |
+| `TaskProgress` | Статус задачи ядра: `Stage`, `ProgressPct`, `Status`, `ErrorCode` |
+| `LectureView` | Минимальный срез лекции для карточки и проверки владельца |
+
+**Конструктор:**
+
+```go
+syncsvc.NewService(repo Repository, core CoreStatus, webhookSecret string) *Service
+```
+
+**HTTP-хендлеры:**
+
+```
+POST /webhooks/core          — приём вебхука ядра (ПУБЛИЧНЫЙ, без сессии;
+                               защищён HMAC X-Webhook-Signature, CSRF-exempt)
+GET  /lectures/{id}/status   — поллинг-прокси (под RequireAuth, htmx ~10с):
+                               возвращает htmx-фрагмент карточки лекции
+```
+
+**`HandleWebhook` (`POST /webhooks/core`):**
+
+- Тело ограничено `MaxBytesReader` 1 МБ.
+- Подпись: `coreclient.VerifyWebhookSignature(body, X-Webhook-Signature, secret)` —
+  constant-time HMAC-SHA256. Неверная подпись → `401 Unauthorized`.
+- Тело: JSON `{task_id, status, error, error_code}` (`coreclient.WebhookPayload`).
+- Допустимые статусы: `processing`, `ready`, `failed`; иное → `400 Bad Request`.
+- Обновление в БД: `UpdateStatusConditional` (анти-гонка — только из `processing`),
+  идемпотентно.
+- CSRF-exempt: маршрут `POST /webhooks/core` выведен из-под `gorilla/csrf` через
+  обёртку `csrfExempt` в `cmd/server`.
+
+**`HandlePollStatus` (`GET /lectures/{id}/status`):**
+
+- Требует авторизации (`RequireAuth`); проверяет владельца лекции.
+- Если статус нетерминальный и задача есть в ядре — запрашивает `GetTaskStatus`.
+- **Fallback-запись:** при переходе задачи в терминальный статус (по ответу
+  ядра) выполняет `UpdateStatusConditional` в БД (resilience к потере вебхука).
+- При недоступности ядра — мягкая деградация: возвращает карточку с последним
+  известным статусом из БД.
+- Ответ: `text/html; charset=utf-8` — htmx-фрагмент (`web.LectureCard`).
+
+**Маппинг `error_code` → русская метка** реализован в `lectureToVM`:
+
+| Код ядра | Отображение |
+|---|---|
+| `rate_limit` | Превышен лимит обработки |
+| `bad_input` | Некорректный источник |
+| `internal` | Внутренняя ошибка обработки |
+| `processing_error` | Ошибка обработки |
+| `download_error` | Ошибка загрузки |
+| `transcription_error` | Ошибка распознавания речи |
+
 ## Точка входа `cmd/server`
 
 Единственный бинарь платформы. Цепочка инициализации:
 
 ```
-config.Load → db.New + db.Migrate → dbAdapter → auth.NewService → web.NewRouter → ListenAndServe
+config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.NewService
+  → lecture.NewService (coreTasksAdapter) → upload.NewService (uploadRepo, Signer)
+  → syncsvc.NewService (syncRepo, coreStatusAdapter) → web.NewRouter → ListenAndServe
 ```
 
 **`dbAdapter`** — адаптер из `cmd/server`, реализует `auth.Repository` поверх
@@ -406,23 +563,57 @@ config.Load → db.New + db.Migrate → dbAdapter → auth.NewService → web.Ne
 импортирует `internal/auth`, `internal/auth` не знает про `pgx`. Корректность
 проверяется compile-time: `var _ auth.Repository = (*dbAdapter)(nil)`.
 
+**`coreTasksAdapter`** — реализует `lecture.CoreTasks` поверх `*coreclient.CoreClient`
+(`DeleteTask`, `CreateTask`). Проверяется compile-time.
+
+**`uploadRepo`** — реализует `upload.Repository` поверх `db.LectureDB`
+(`CreateLecture`). Проверяется compile-time.
+
+**`syncRepo`** — реализует `syncsvc.Repository` поверх `db.LectureDB`
+(`UpdateStatusConditional`, `FindByID`). Проверяется compile-time.
+
+**`coreStatusAdapter`** — реализует `syncsvc.CoreStatus` поверх
+`*coreclient.CoreClient` (`GetTaskStatus`). Проверяется compile-time.
+
+Единственный экземпляр `*coreclient.CoreClient` (создаётся через `coreclient.New`)
+и единственный экземпляр `*db.LectureDB` разделяются между всеми адаптерами.
+
 **`web.NewRouter`** принимает вариативные опции — `web.WithGlobalMiddleware` и
-`web.WithMount`. Пакет `internal/web` не зависит от `internal/auth`; сервис
-инъектируется через опции:
+`web.WithMount`. Пакет `internal/web` не зависит от `internal/auth`; сервисы
+инъектируются через опции:
 
 ```go
 web.NewRouter(
-    web.WithGlobalMiddleware(authSvc.LoadSession, csrfMiddleware),
+    web.WithGlobalMiddleware(
+        authSvc.LoadSession,
+        csrfExempt("/webhooks/core", csrfMiddleware), // вебхук ядра выведен из-под CSRF
+        csrfInjector,
+    ),
+    web.WithMount(func(r chi.Router) { r.Post("/webhooks/core", syncSvc.HandleWebhook) }),
     web.WithMount(func(r chi.Router) { authSvc.Mount(r) }),
+    web.WithMount(func(r chi.Router) {
+        r.Group(func(pr chi.Router) {
+            pr.Use(authSvc.RequireAuth)
+            lectureSvc.Mount(pr)          // GET /lectures, POST /lectures/{id}/*
+            pr.Get("/upload", ...)        // страница формы загрузки
+            uploadSvc.Mount(pr)           // POST /upload/presign|confirm|youtube
+            pr.Get("/lectures/{id}/status", syncSvc.HandlePollStatus)
+        })
+    }),
 )
 ```
 
 **Адрес** задаётся через `PLATFORM_ADDR` (дефолт `:8080`).
 
-**Известное ограничение (технический долг).** CSRF-ключ генерируется через
-`crypto/rand` при каждом старте сервера. При рестарте все ранее выданные CSRF-токены
-инвалидируются. Для прод-стабильности необходимо вынести ключ в env-переменную
-(например, `PLATFORM_CSRF_KEY`).
+**Известные ограничения (технический долг).**
+
+- CSRF-ключ и ключ подписи presign-токенов (`uploadSignKey`) генерируются через
+  `crypto/rand` при каждом старте сервера. При рестарте все ранее выданные
+  CSRF-токены и незавершённые presign-токены инвалидируются. Для прод-стабильности
+  необходимо вынести ключи в env-переменные (`PLATFORM_CSRF_KEY`,
+  `PLATFORM_UPLOAD_SIGN_KEY`).
+- Мягкий экран 502/503 при недоступности ядра (для `confirm` и `youtube`) —
+  не реализован (долг §8).
 
 ## Генерация клиента
 
@@ -507,7 +698,7 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
   `LoadSession`/`RequireAuth`, точка входа `cmd/server` с полной цепочкой
   инициализации, compile-time проверка `dbAdapter`. `make gate` зелёный.
 
-**Волна C1 — начата.** Первый атом завершён:
+**Волна C1 — активна.** Завершённые атомы:
 
 - **C1-lecture** — `internal/lecture` + расширение `internal/db` и `internal/web`:
   доменный модуль «Мои лекции» готов. Типы `Lecture`/`Status`/`Visibility`,
@@ -517,15 +708,28 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
   `auth.RequireAuth`, страница `LecturesPage` + `LectureCard`, CSRF через
   hx-headers. `make gate` зелёный.
 
-  **Известные ограничения (технический долг C1):**
-  - `cmd/server` использует `noopCoreTasks` — заглушку `lecture.CoreTasks`.
-    Удаление лекции работает (строка удаляется; ядро не вызывается — noop).
-    Retry возвращает «обработка временно недоступна» — честное поведение до
-    проводки реального `coreTasksAdapter` поверх `coreclient.CoreClient`.
-  - Отсутствует экран 502/503 при недоступности ядра.
+- **C1-upload** — `internal/upload` + проводка в `cmd/server`: загрузка лекций
+  полностью готова. Страница формы (`GET /upload`), presign-поток (`POST
+  /upload/presign`), подтверждение (`POST /upload/confirm`), YouTube (`POST
+  /upload/youtube`), клиентский JS-поток (presign → прямой PUT в MinIO → confirm),
+  HMAC stateless-токен `Signer`, валидация медиа. `cmd/server` подключает
+  реальный `*coreclient.CoreClient` через `coreTasksAdapter` и `coreStatusAdapter` —
+  задачи реально уходят в ядро. `make gate` зелёный.
 
-  Следующие атомы волны C1: **upload** (форма загрузки + presigned PUT),
-  **hub** (публичная витрина), **reader** (страница чтения конспекта),
-  **sync** (вебхук + поллинг, потребитель `UpdateStatusConditional`).
+- **C1-sync** — `internal/syncsvc` + проводка в `cmd/server`: синхронизация
+  статуса лекции с ядром готова. Вебхук `POST /webhooks/core` (HMAC-подпись,
+  CSRF-exempt, conditional update, идемпотентность), поллинг-прокси `GET
+  /lectures/{id}/status` (htmx ~10с, fallback-запись терминального статуса,
+  мягкая деградация при недоступности ядра). `make gate` зелёный.
+
+  **Известные ограничения (технический долг C1):**
+  - PDF-слайды (`has_pdf`) не передаются в ядро — проброс файла отдельный атом.
+  - Прямые (не-YouTube) медиа-URL не поддержаны.
+  - `uploadSignKey` и CSRF-ключ генерируются на старте — рестарт инвалидирует
+    незавершённые presign-токены (приемлемо для беты).
+  - Мягкий экран 502/503 при недоступности ядра — долг (§8).
+
+  Следующие атомы волны C1: **hub** (публичная витрина), **reader** (страница
+  чтения конспекта).
 
 Подробности — в `docs/WORKFLOW.md` и `docs/TASKS.md`.
