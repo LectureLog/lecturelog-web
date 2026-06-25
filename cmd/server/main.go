@@ -6,6 +6,7 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/db"
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
+	"github.com/LectureLog/lecturelog-web/internal/syncsvc"
 	"github.com/LectureLog/lecturelog-web/internal/upload"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 
@@ -196,6 +198,13 @@ func main() {
 	upRepo := &uploadRepo{lectures: lectureDB}
 	uploadSvc := upload.NewService(core, upRepo, signer, cfg.PresignedTTL)
 
+	// ─── C1-sync wiring ───
+	syncSvc := syncsvc.NewService(
+		&syncRepo{lectures: lectureDB},
+		&coreStatusAdapter{core: core},
+		cfg.WebhookSecret,
+	)
+
 	// gorilla/csrf middleware: токен из контекста (csrf.Token(r)) → templ-формы через hx-headers.
 	// X-CSRF-Token — заголовок для htmx (hx-headers={"X-CSRF-Token": "..."}).
 	csrfMiddleware := csrf.Protect(
@@ -203,6 +212,20 @@ func main() {
 		csrf.Secure(secureCookies),
 		csrf.RequestHeader("X-CSRF-Token"),
 	)
+
+	// C1-sync: внешний вебхук ядра подписан HMAC, но не имеет CSRF-cookie.
+	csrfExempt := func(path string, mw func(http.Handler) http.Handler) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			protected := mw(next)
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == path {
+					next.ServeHTTP(w, r)
+					return
+				}
+				protected.ServeHTTP(w, r)
+			})
+		}
+	}
 
 	// csrf-инжектор: добавляет CSRF-токен в контекст запроса после csrfMiddleware.
 	// Хендлеры лекций читают токен через web.CSRFTokenFromContext(r.Context())
@@ -217,10 +240,13 @@ func main() {
 	// Собираем chi-роутер с auth-middleware и маршрутами
 	handler := web.NewRouter(
 		web.WithGlobalMiddleware(
-			authSvc.LoadSession, // читает сессию → *User в контекст
-			csrfMiddleware,      // CSRF-защита мутирующих маршрутов
-			csrfInjector,        // кладёт csrf.Token(r) в контекст для layout
+			authSvc.LoadSession,                          // читает сессию → *User в контекст
+			csrfExempt("/webhooks/core", csrfMiddleware), // CSRF-защита мутирующих маршрутов, кроме HMAC-вебхука
+			csrfInjector,                                 // кладёт csrf.Token(r) в контекст для layout
 		),
+		web.WithMount(func(r chi.Router) {
+			r.Post("/webhooks/core", syncSvc.HandleWebhook)
+		}),
 		web.WithMount(func(r chi.Router) {
 			authSvc.Mount(r) // GET /auth/login, GET /auth/callback, POST /auth/logout
 		}),
@@ -230,6 +256,7 @@ func main() {
 				pr.Use(authSvc.RequireAuth)
 				lectureSvc.Mount(pr) // GET /lectures, POST /lectures/{id}/*
 				uploadSvc.Mount(pr)  // POST /upload/presign, /upload/confirm, /upload/youtube
+				pr.Get("/lectures/{id}/status", syncSvc.HandlePollStatus)
 			})
 		}),
 	)
@@ -372,3 +399,83 @@ func (r *uploadRepo) CreateLecture(ctx context.Context, p upload.CreateLecturePa
 
 // _ — проверка на этапе компиляции: uploadRepo реализует upload.Repository.
 var _ upload.Repository = (*uploadRepo)(nil)
+
+// ─── C1-sync wiring ────────────────────────────────────────────────────────
+
+// syncRepo реализует syncsvc.Repository поверх db.LectureDB.
+type syncRepo struct {
+	lectures *db.LectureDB
+}
+
+func (r *syncRepo) UpdateStatusConditional(ctx context.Context, coreTaskID, status, errorCode string) (int64, error) {
+	return r.lectures.UpdateStatusConditional(ctx, coreTaskID, status, errorCode)
+}
+
+func (r *syncRepo) FindByID(ctx context.Context, lectureID string) (*syncsvc.LectureView, error) {
+	row, err := r.lectures.FindByID(ctx, lectureID)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+	return rowToLectureView(*row), nil
+}
+
+func rowToLectureView(row db.LectureRow) *syncsvc.LectureView {
+	return &syncsvc.LectureView{
+		ID:         row.LectureID,
+		OwnerID:    row.OwnerID,
+		CoreTaskID: row.CoreTaskID,
+		Status:     row.Status,
+		ErrorCode:  row.ErrorCode,
+		Title:      row.Title,
+		SourceKind: row.SourceKind,
+		Visibility: row.Visibility,
+		UpdatedAt:  row.UpdatedAt,
+	}
+}
+
+// coreStatusAdapter реализует syncsvc.CoreStatus поверх coreclient.CoreClient.
+type coreStatusAdapter struct {
+	core *coreclient.CoreClient
+}
+
+func (a *coreStatusAdapter) GetTaskStatus(ctx context.Context, coreTaskID string) (*syncsvc.TaskProgress, error) {
+	status, err := a.core.GetTaskStatus(ctx, coreTaskID)
+	if err != nil {
+		if errors.Is(err, coreclient.ErrTaskNotFound) {
+			return nil, syncsvc.ErrTaskNotFound
+		}
+		return nil, err
+	}
+	return taskStatusToProgress(status), nil
+}
+
+func taskStatusToProgress(status coreclient.TaskStatus) *syncsvc.TaskProgress {
+	progress := &syncsvc.TaskProgress{
+		ProgressPct: status.ProgressPct,
+		Status:      "processing",
+	}
+	if status.Stage != nil {
+		progress.Stage = *status.Stage
+	}
+	if status.ErrorCode != nil {
+		progress.ErrorCode = *status.ErrorCode
+	}
+
+	if status.ErrorCode != nil || status.Error != nil {
+		progress.Status = "failed"
+		return progress
+	}
+	if status.ResultPath != nil {
+		progress.Status = "ready"
+	}
+	return progress
+}
+
+// _ — проверка на этапе компиляции: syncRepo реализует syncsvc.Repository.
+var _ syncsvc.Repository = (*syncRepo)(nil)
+
+// _ — проверка на этапе компиляции: coreStatusAdapter реализует syncsvc.CoreStatus.
+var _ syncsvc.CoreStatus = (*coreStatusAdapter)(nil)
