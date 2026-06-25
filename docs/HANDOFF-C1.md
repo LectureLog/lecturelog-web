@@ -7,19 +7,31 @@
 > (gofmt, git, ворота) — сам.
 
 ## База волны
-- `integration` = `bbe2082` (после C0 + C1-lecture + C1-upload под-атомы 1-5). origin синхронен
-  по C0 (2ef594f..0507824), НО C1-lecture и C1-upload ещё НЕ запушены (PR/push — в конце волны C1).
-- Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt), worktree-ов нет. Безопасная граница паузы.
+- `integration` = `db3ec68` (после C0 + C1-lecture + **C1-upload ПОЛНОСТЬЮ** + **C1-sync**). origin
+  синхронен по C0 (2ef594f..0507824), НО C1-lecture/upload/sync ещё НЕ запушены (PR/push — в конце волны).
+- Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt + gen-check exit 0), worktree-ов нет. Безопасная граница.
 
-## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (пауза 2026-06-24): C1-upload готов на 5/7 под-атомов
-C1-upload ДРОБЛЁН Plan-агентом на 7 под-атомов. Смержены 5, остались 2 (UI + mount).
-ПЕРВОЕ ДЕЙСТВИЕ нового чата: см. раздел «C1-upload — разбивка и остаток» ниже, начни с под-атома
-**C1-upload-mount** (РЕКОМЕНДАЦИЯ оркестратора: он закрывает BLOCKER «routes не подключены»,
-легче UI, без templ-граблей; даёт рабочее upload API в сервере). UI (templ-форма) — после него
-ИЛИ параллельно (UI не зависит от mount, но mount монтирует и GET /upload-страницу из UI —
-если UI ещё нет, mount монтирует только API presign/confirm/youtube, страницу добавит UI-mount).
-Владелец на вопрос порядка (mount-первым / UI-первым / оба / пауза) НЕ ответил — пауза по лимиту;
-порядок выбирает новый оркестратор (рекомендация — mount первым).
+## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-25): C1-upload+C1-sync ЗАВЕРШЕНЫ; остались hub, reader
+ВЫПОЛНЕНО в этой сессии (2026-06-25): достроены последние 2 под-атома C1-upload (mount=cb164fb,
+ui=fdea754+fix 777f04a, merge df35653) И полностью атом C1-sync (1c4dc45+fix 9485c3e, merge 2a96b75).
+README обновлён (db3ec68). ПЕРВОЕ ДЕЙСТВИЕ нового чата: начать **C1-hub** (меньше) и/или **C1-reader**
+(самый объёмный — ДРОБИТЬ на под-атомы). hub и reader независимы → можно ∥.
+
+### ⚙️ ОКРУЖЕНИЕ НЕСТАБИЛЬНО (важно!)
+Среда теряет тулчейны посреди сессии. На старте НЕ было Go — ставил вручную (tar в /usr/local/go,
+PATH через /etc/profile.d/go.sh, НО Bash-инструмент не-login → PATH задавать инлайн
+`export PATH=$PATH:/usr/local/go/bin:/root/go/bin`). Node тоже пропадал → runtime codex-плагина
+(`.mjs`) молча падал `node: command not found`, Codex ничего не коммитил. Node v22 ставил в /usr/local.
+ЕСЛИ Codex вернулся пустым/без коммитов — ПЕРВЫМ делом `which go && which node`, переустанови.
+
+### ⚠️ ГРАБЛЯ Codex-обёртки: детач + зависание на stdin
+`codex:codex-rescue` (особенно с run_in_background) часто ДЕТАЧИТ реальный codex-job и возвращает
+«Задача передана в фоновый режим» — job может зависнуть/не закоммитить. `codex exec` напрямую в фоне
+ВИСНЕТ на чтении stdin (`Reading additional input from stdin...`, 0% CPU) — ОБЯЗАТЕЛЬНО `</dev/null`.
+Надёжный путь для LOOP-фиксов: `codex exec -C <worktree> -m gpt-5.5 -c model_reasoning_effort=medium
+-s workspace-write --skip-git-repo-check "$(cat prompt)" </dev/null`. В sandbox codex `.git` бывает
+read-only → codex НЕ закоммитит; тогда оркестратор сам прогоняет ворота и коммитит правки (механика).
+ВСЕГДА перепроверяй процесс: жив ли (ps), пишет ли файлы (mtime), есть ли коммит — НЕ верь «отправлено».
 
 ## Порядок задач C1 (РЕШЕНО оркестратором)
 Заявлено «5 ∥-задач», но реальные зависимости делают их НЕ полностью параллельными:
@@ -42,8 +54,8 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
 | Задача | PLAN | ISOLATE | BUILD | ACCEPT | REVIEW | LOOP | MERGE | DOCS |
 |---|---|---|---|---|---|---|---|---|
 | C1-lecture | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 фикса (security) | ✅ в integration (48f55b3) | ✅ (b452a96) |
-| C1-upload  | ✅ | ✅ | 🟡 5/7 | 🟡 5/7 | 🟡 5/7 | ✅ по мере | 🟡 5/7 в integration | ⏳ (в конце атома) |
-| C1-sync    | ⏳ | | | | | | | |
+| C1-upload  | ✅ | ✅ | ✅ 7/7 | ✅ COMPLETE | ✅ (2 MAJOR ui) | ✅ guard/htmx фиксы | ✅ в integration (df35653) | ✅ (db3ec68) |
+| C1-sync    | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ (2 MAJOR) | ✅ MaxBytes+статус фиксы | ✅ в integration (2a96b75) | ✅ (db3ec68) |
 | C1-hub     | ⏳ | | | | | | | |
 | C1-reader  | ⏳ | | | | | | | |
 
