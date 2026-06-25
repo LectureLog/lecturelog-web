@@ -14,8 +14,33 @@
 ## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-25): C1-upload+C1-sync ЗАВЕРШЕНЫ; остались hub, reader
 ВЫПОЛНЕНО в этой сессии (2026-06-25): достроены последние 2 под-атома C1-upload (mount=cb164fb,
 ui=fdea754+fix 777f04a, merge df35653) И полностью атом C1-sync (1c4dc45+fix 9485c3e, merge 2a96b75).
-README обновлён (db3ec68). ПЕРВОЕ ДЕЙСТВИЕ нового чата: начать **C1-hub** (меньше) и/или **C1-reader**
-(самый объёмный — ДРОБИТЬ на под-атомы). hub и reader независимы → можно ∥.
+README обновлён (db3ec68). integration ЗАПУШЕН в origin (e750cb7, 2026-06-25 по решению владельца).
+ПЕРВОЕ ДЕЙСТВИЕ нового чата (на выбор): **C1-devstack** (быстрый dev-experience атом — см. спеку
+ниже «ЗАПЛАНИРОВАН АТОМ C1-devstack», владелец согласовал; хороший лёгкий старт), затем **C1-hub**
+(меньше) и/или **C1-reader** (самый объёмный — ДРОБИТЬ на под-атомы). hub и reader независимы → ∥.
+
+### 📋 ЗАПЛАНИРОВАН АТОМ C1-devstack (dev-experience, согласован владельцем 2026-06-25)
+Цель — запуск в одну команду без ручного `source .env`. Небольшой самодостаточный атом.
+Объём (BUILD через Codex по этой спеке):
+1. **godotenv-загрузчик в `cmd/server/main.go`**: ПЕРЕД `config.Load` подгружать `.env` из корня, если
+   файл есть (например `github.com/joho/godotenv` → `_ = godotenv.Load()`; молча игнорировать
+   отсутствие файла — реальные env-переменные имеют приоритет). `go get` зависимости, `go mod tidy`.
+2. **`.env.example`** в корне: все ОБЯЗАТЕЛЬНЫЕ переменные с комментариями и плейсхолдерами —
+   GOOGLE_CLIENT_ID/SECRET, PLATFORM_CALLBACK_URL=http://localhost:8080/auth/callback,
+   LECTURELOG_WEBHOOK_SECRET, PLATFORM_DB_DSN (на локальный compose-Postgres),
+   CORE_API_BASE_URL, CORE_MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET/USE_SSL; опц.
+   PLATFORM_ADDR/PRESIGNED_TTL/SESSION_TTL/PLATFORM_SECURE. `.env` — в .gitignore (НЕ коммитить).
+3. **`docker-compose.yml`**: сервис `postgres` (16, healthcheck, том, креды под DSN из .env.example)
+   и `minio` (+ `minio/mc` init-контейнер, создающий BUCKET и политику). Порты наружу
+   (5432, 9000/9001). DSN/endpoint в .env.example должны указывать на эти сервисы.
+4. **Makefile**: цели `up` (docker compose up -d), `down`, `dev` (up + `set -a; . ./.env; set +a;
+   go run ./cmd/server`). Прокомментировать.
+5. **README**: раздел «Локальный запуск» — `cp .env.example .env` → заполнить Google OAuth →
+   `make up` → `make dev` → http://localhost:8080. Уточнить, что ядро (CORE_API_BASE_URL) для
+   ПОЛНОГО цикла загрузки нужно отдельно (compose поднимает только Postgres+MinIO платформы).
+Ворота: `go build/vet/test`, `go mod tidy` (чистый diff), gofmt. Тесты герметичны (godotenv.Load()
+без файла не падает). Долг: мок-ядро в compose — отдельно (для e2e GATE C1). НЕ блокер.
+Грабля: миграции применяются автоматически при старте (db.Migrate) — отдельная команда не нужна.
 
 ### ⚙️ ОКРУЖЕНИЕ НЕСТАБИЛЬНО (важно!)
 Среда теряет тулчейны посреди сессии. На старте НЕ было Go — ставил вручную (tar в /usr/local/go,
