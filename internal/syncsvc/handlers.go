@@ -15,7 +15,12 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-const webhookSignatureHeader = "X-Webhook-Signature"
+const (
+	webhookSignatureHeader = "X-Webhook-Signature"
+
+	// максимальный размер тела вебхука (1 МБ)
+	maxWebhookBodyBytes = 1 << 20
+)
 
 // HandleWebhook принимает подписанный вебхук ядра со сменой статуса задачи.
 func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) {
@@ -25,9 +30,15 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxWebhookBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
-		http.Error(w, "неверный запрос", http.StatusBadRequest)
+		var maxBytesErr *http.MaxBytesError
+		if errors.As(err, &maxBytesErr) {
+			http.Error(w, "тело вебхука слишком большое", http.StatusRequestEntityTooLarge)
+			return
+		}
+		http.Error(w, "не удалось прочитать тело вебхука", http.StatusBadRequest)
 		return
 	}
 
@@ -39,6 +50,10 @@ func (s *Service) HandleWebhook(w http.ResponseWriter, r *http.Request) {
 	var payload coreclient.WebhookPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		http.Error(w, "неверный JSON", http.StatusBadRequest)
+		return
+	}
+	if !isWebhookStatus(payload.Status) {
+		http.Error(w, "invalid status", http.StatusBadRequest)
 		return
 	}
 
@@ -125,6 +140,15 @@ func mergeProgress(lec LectureView, progress TaskProgress) LectureView {
 
 func isTerminalStatus(status string) bool {
 	return status == "ready" || status == "failed"
+}
+
+func isWebhookStatus(status string) bool {
+	switch status {
+	case "processing", "ready", "failed":
+		return true
+	default:
+		return false
+	}
 }
 
 func lectureToVM(lec LectureView) web.LectureCardVM {

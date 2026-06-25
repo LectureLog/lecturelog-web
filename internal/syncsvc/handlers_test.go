@@ -78,6 +78,42 @@ func TestHandleWebhook_BadJSONWithValidSignatureBadRequest(t *testing.T) {
 	}
 }
 
+func TestHandleWebhook_BodyTooLargeReturnsClientError(t *testing.T) {
+	body := bytes.Repeat([]byte("a"), maxWebhookBodyBytes+1)
+	repo := &mockRepo{}
+	svc := NewService(repo, &mockCore{}, "secret")
+
+	rec := performWebhook(svc, body, signWebhook(body, "secret"))
+
+	if rec.Code < 400 || rec.Code >= 500 {
+		t.Fatalf("код = %d, ожидается 4xx", rec.Code)
+	}
+	if rec.Code == http.StatusOK {
+		t.Fatal("код не должен быть 200")
+	}
+	if len(repo.updates) != 0 {
+		t.Fatalf("update не должен вызываться, вызовов: %d", len(repo.updates))
+	}
+}
+
+func TestHandleWebhook_InvalidStatusWithValidSignatureBadRequest(t *testing.T) {
+	body := []byte(`{"task_id":"task-1","status":"garbage","error":null,"error_code":null}`)
+	repo := &mockRepo{}
+	svc := NewService(repo, &mockCore{}, "secret")
+
+	rec := performWebhook(svc, body, signWebhook(body, "secret"))
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("код = %d, ожидается 400", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "invalid status") {
+		t.Fatalf("ответ должен содержать invalid status: %s", rec.Body.String())
+	}
+	if len(repo.updates) != 0 {
+		t.Fatalf("UpdateStatusConditional не должен вызываться, вызовов: %d", len(repo.updates))
+	}
+}
+
 func TestHandleWebhook_FailedPassesErrorCode(t *testing.T) {
 	body := []byte(`{"task_id":"task-2","status":"failed","error":"bad file","error_code":"bad_input"}`)
 	repo := &mockRepo{}
