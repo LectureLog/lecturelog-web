@@ -24,6 +24,18 @@ func renderLayout(t *testing.T, title string) string {
 	return b.String()
 }
 
+// renderUploadPage — вспомогательная функция: рендерит UploadPage в строку.
+func renderUploadPage(t *testing.T) string {
+	t.Helper()
+	var b bytes.Buffer
+	data := web.LayoutData{Title: "Новый конспект", CSRFToken: "tok"}
+	err := web.UploadPage(data).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("UploadPage.Render: %v", err)
+	}
+	return b.String()
+}
+
 // TestLayout_DocType проверяет DOCTYPE и базовые атрибуты корневого элемента.
 func TestLayout_DocType(t *testing.T) {
 	html := renderLayout(t, "Тест")
@@ -256,6 +268,74 @@ func TestLayout_CSRFHeader_Empty(t *testing.T) {
 	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами)
 	if !strings.Contains(html, `hx-headers="{}"`) {
 		t.Error("пустой CSRF-токен: ожидается hx-headers=\"{}\"")
+	}
+}
+
+// ─── Тесты страницы загрузки ────────────────────────────────────────────────
+
+func TestUploadPage_Segments(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `data-mode="file"`) || !strings.Contains(html, ">Файл<") {
+		t.Error("ожидается сегмент режима Файл")
+	}
+	if !strings.Contains(html, `data-mode="url"`) || !strings.Contains(html, ">Ссылка<") {
+		t.Error("ожидается сегмент режима Ссылка")
+	}
+}
+
+func TestUploadPage_DropZone(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `class="ll-upload-drop"`) {
+		t.Error("ожидается drop-зона ll-upload-drop")
+	}
+	if !strings.Contains(html, `type="file"`) {
+		t.Error("ожидается input type=file")
+	}
+	if !strings.Contains(html, "Выбрать файл") {
+		t.Error("ожидается кнопка выбора файла")
+	}
+}
+
+func TestUploadPage_YouTubeForm(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `hx-post="/upload/youtube"`) {
+		t.Error("ожидается htmx-форма POST /upload/youtube")
+	}
+	if !strings.Contains(html, `name="url"`) {
+		t.Error("ожидается поле url")
+	}
+}
+
+func TestUploadPage_ExtractToggle(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `name="extract_slides"`) {
+		t.Error("ожидается тумблер extract_slides")
+	}
+	if !strings.Contains(html, `name="has_pdf"`) {
+		t.Error("ожидается чекбокс has_pdf")
+	}
+}
+
+func TestUploadPage_CSRFData(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `id="ll-upload"`) {
+		t.Error("ожидается корневой #ll-upload")
+	}
+	if !strings.Contains(html, `data-csrf="tok"`) {
+		t.Error("ожидается CSRF-токен в data-csrf")
+	}
+}
+
+func TestUploadPage_ScriptTag(t *testing.T) {
+	html := renderUploadPage(t)
+
+	if !strings.Contains(html, `<script src="/static/js/upload.js" defer></script>`) {
+		t.Error("ожидается подключение /static/js/upload.js")
 	}
 }
 
