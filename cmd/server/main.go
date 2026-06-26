@@ -20,6 +20,7 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/config"
 	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/db"
+	"github.com/LectureLog/lecturelog-web/internal/hub"
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
 	"github.com/LectureLog/lecturelog-web/internal/syncsvc"
 	"github.com/LectureLog/lecturelog-web/internal/upload"
@@ -174,6 +175,7 @@ func main() {
 		&lectureRepo{lectures: lectureDB},
 		&coreTasksAdapter{core: core},
 	)
+	hubSvc := hub.NewService(&hubRepo{lectures: lectureDB}, 0)
 
 	// CSRF-ключ генерируется на старте (32 случайных байта).
 	// ДОЛГ: для прод-стабильности вынести в env (PLATFORM_CSRF_KEY) — рестарт инвалидирует токены.
@@ -249,6 +251,9 @@ func main() {
 		}),
 		web.WithMount(func(r chi.Router) {
 			authSvc.Mount(r) // GET /auth/login, GET /auth/callback, POST /auth/logout
+		}),
+		web.WithMount(func(r chi.Router) {
+			hubSvc.Mount(r) // GET /hub доступен анонимным посетителям
 		}),
 		web.WithMount(func(r chi.Router) {
 			// Группа под RequireAuth: только аутентифицированные пользователи
@@ -386,6 +391,36 @@ var _ lecture.CoreTasks = (*coreTasksAdapter)(nil)
 
 // _ — проверка на этапе компиляции: dbAdapter реализует auth.Repository.
 var _ auth.Repository = (*dbAdapter)(nil)
+
+// ─── Адаптер для hub.Repository ─────────────────────────────────────────────
+
+// hubRepo реализует hub.Repository поверх db.LectureDB.
+type hubRepo struct {
+	lectures *db.LectureDB
+}
+
+func (r *hubRepo) ListPublic(ctx context.Context, limit int) ([]hub.PublicLecture, error) {
+	rows, err := r.lectures.ListPublic(ctx, limit)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]hub.PublicLecture, len(rows))
+	for i, row := range rows {
+		result[i] = hub.PublicLecture{
+			ID:              row.LectureID,
+			OwnerID:         row.OwnerID,
+			Title:           row.Title,
+			SourceKind:      row.SourceKind,
+			PublishedAt:     row.PublishedAt,
+			AuthorName:      row.AuthorName,
+			AuthorAvatarURL: row.AuthorAvatarURL,
+		}
+	}
+	return result, nil
+}
+
+// _ — проверка на этапе компиляции: hubRepo реализует hub.Repository.
+var _ hub.Repository = (*hubRepo)(nil)
 
 // ─── Адаптер для upload.Repository ──────────────────────────────────────────
 
