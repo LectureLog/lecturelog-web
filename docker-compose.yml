@@ -17,6 +17,8 @@ services:
 
   minio:
     image: minio/minio
+    # Заглушка MinIO ядра для изолированной разработки без реального ядра.
+    profiles: ["stub-minio"]
     environment:
       MINIO_ROOT_USER: lecturelog
       MINIO_ROOT_PASSWORD: lecturelog-minio-secret
@@ -34,6 +36,7 @@ services:
 
   minio-init:
     image: minio/mc
+    profiles: ["stub-minio"]
     depends_on:
       minio:
         condition: service_healthy

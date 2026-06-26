@@ -1,0 +1,8 @@
+.git
+.worktrees
+bin/
+server
+tmp/
+node_modules/
+.env
+*.md

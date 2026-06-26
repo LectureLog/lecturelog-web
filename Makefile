@@ -1,7 +1,7 @@
 # Makefile платформы LectureLog (web).
 # Цели обёрнуты вокруг стандартного go-тулчейна и генерации coreclient из спеки ядра.
 
-.PHONY: generate build vet test gate sync-spec migrate-test templ tailwind-bin tailwind web-gen gen-check up down dev
+.PHONY: generate build vet test gate sync-spec migrate-test templ tailwind-bin tailwind web-gen gen-check up up-stub down dev watch prod prod-down
 
 # ─── Toolchain web-слоя ────────────────────────────────────────────────────────
 
@@ -49,9 +49,13 @@ gen-check: web-gen
 
 # ─── Стандартные цели ──────────────────────────────────────────────────────────
 
-# Поднять локальные Postgres и MinIO для платформы.
+# Поднять только локальный Postgres платформы. Ядро и его MinIO запускаются отдельно.
 up:
-	docker compose up -d
+	docker compose up -d postgres
+
+# Поднять Postgres и MinIO-заглушку ядра для разработки без реального ядра.
+up-stub:
+	docker compose --profile stub-minio up -d
 
 # Остановить локальные сервисы платформы.
 down:
@@ -60,6 +64,23 @@ down:
 # Запустить сервер; .env подгружается точкой входа автоматически.
 dev: up
 	go run ./cmd/server
+
+# Горячая перезагрузка Go-кода. Если air не установлен, запускается через go run
+# без добавления инструмента разработки в go.mod. templ и CSS генерируются вручную.
+watch:
+	@if command -v air >/dev/null 2>&1; then \
+		air; \
+	else \
+		go run github.com/air-verse/air@latest; \
+	fi
+
+# Собрать и поднять production-окружение одной командой: web + Postgres.
+prod:
+	docker compose -f docker-compose.prod.yml up -d --build
+
+# Остановить production-окружение.
+prod-down:
+	docker compose -f docker-compose.prod.yml down
 
 # Генерация coreclient: нормализация спеки (3.1.0 -> 3.0-nullable) + oapi-codegen.
 # Сам процесс описан в //go:generate директивах internal/coreclient/generate.go.
