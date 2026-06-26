@@ -52,13 +52,45 @@
   });
 
   const lightbox = document.getElementById('readerLightbox');
-  selectAll('.ll-reader-slide img').forEach((image) => image.addEventListener('click', () => {
-    lightbox.replaceChildren(image.cloneNode());
+  const lightboxClose = lightbox.querySelector('.ll-reader-lightbox-close');
+  let lightboxTrigger = null;
+  const closeLightbox = () => {
+    if (lightbox.hidden) return;
+    lightbox.hidden = true;
+    lightboxTrigger?.focus();
+    lightboxTrigger = null;
+  };
+  const openLightbox = (image) => {
+    lightboxTrigger = image;
+    lightbox.replaceChildren(lightboxClose, image.cloneNode());
     lightbox.hidden = false;
-  }));
-  lightbox.addEventListener('click', () => { lightbox.hidden = true; });
+    lightboxClose.focus();
+  };
+  selectAll('.ll-reader-slide img').forEach((image) => {
+    image.tabIndex = 0;
+    image.setAttribute('role', 'button');
+    image.setAttribute('aria-label', `Открыть слайд: ${image.alt}`);
+    image.addEventListener('click', () => openLightbox(image));
+    image.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openLightbox(image);
+    });
+  });
+  lightboxClose.addEventListener('click', closeLightbox);
+  lightbox.addEventListener('click', (event) => {
+    if (event.target === lightbox) closeLightbox();
+  });
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') lightbox.hidden = true;
+    if (lightbox.hidden) return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      closeLightbox();
+    }
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      lightboxClose.focus();
+    }
   });
 
   const searchButton = document.getElementById('readerSearchButton');
@@ -105,10 +137,10 @@
       for (let position = lower.indexOf(normalized, offset); position !== -1; position = lower.indexOf(normalized, offset)) {
         fragment.append(text.slice(offset, position));
         const mark = document.createElement('mark');
-        mark.textContent = text.slice(position, position + term.length);
+        mark.textContent = text.slice(position, position + normalized.length);
         fragment.append(mark);
         matches.push(mark);
-        offset = position + term.length;
+        offset = position + normalized.length;
       }
       fragment.append(text.slice(offset));
       node.replaceWith(fragment);

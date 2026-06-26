@@ -111,8 +111,9 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 					<footer class="ll-reader-foot">LectureLog · Конспект лекции</footer>
 				</article>
 			</div>
-			<div class="ll-reader-lightbox" id="readerLightbox" role="dialog" aria-modal="true" aria-label="Просмотр слайда" hidden></div>
-			<div class="ll-reader-toast" id="readerToast" role="status"></div>
+			<div class="ll-reader-lightbox" id="readerLightbox" role="dialog" aria-modal="true" aria-label="Просмотр слайда" hidden>
+				<button type="button" class="ll-reader-lightbox-close" aria-label="Закрыть просмотр слайда">×</button>
+			</div>
 		</div>
 		<script src="/static/js/reader.js" defer></script>
 	}
