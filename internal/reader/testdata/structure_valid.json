@@ -1,0 +1,25 @@
+{
+  "source": {
+    "title": "Лекция о Go",
+    "kind": "video",
+    "duration": 3600
+  },
+  "sections": [
+    {
+      "title": "Введение",
+      "subtopics": [
+        {
+          "title": "План",
+          "media": {
+            "kind": "video",
+            "start": 0,
+            "end": 120,
+            "key": "results/task-1/clip.mp4"
+          },
+          "slide_keys": ["results/task-1/slide-1.png"],
+          "content_md": "# План\n\n**Важное**"
+        }
+      ]
+    }
+  ]
+}

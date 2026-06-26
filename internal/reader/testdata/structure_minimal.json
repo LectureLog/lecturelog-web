@@ -1,0 +1,18 @@
+{
+  "source": {
+    "title": "Аудиолекция",
+    "kind": "audio",
+    "duration": 42
+  },
+  "sections": [
+    {
+      "title": "Тема",
+      "subtopics": [
+        {
+          "title": "Подтема",
+          "content_md": "Текст"
+        }
+      ]
+    }
+  ]
+}
