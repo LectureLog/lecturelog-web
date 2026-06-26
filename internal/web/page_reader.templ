@@ -1,0 +1,169 @@
+package web
+
+import (
+	"fmt"
+	"strings"
+)
+
+// ReaderVM — view-модель страницы читалки лекции.
+type ReaderVM struct {
+	LectureID   string
+	Title       string
+	SourceTitle string
+	SourceKind  string
+	Duration    int
+	IsOwner     bool
+	Sections    []ReaderSectionVM
+}
+
+// ReaderSectionVM — раздел конспекта в читалке.
+type ReaderSectionVM struct {
+	Number    string
+	Title     string
+	Subtopics []ReaderSubtopicVM
+}
+
+// ReaderSubtopicVM — подтема конспекта.
+type ReaderSubtopicVM struct {
+	Number      string
+	Title       string
+	ContentHTML string
+	Media       *ReaderMediaVM
+	SlideURLs   []string
+}
+
+// ReaderMediaVM — медиафрагмент подтемы.
+type ReaderMediaVM struct {
+	Kind  string
+	Start int
+	End   int
+	URL   string
+}
+
+// ReaderPage — страница «Читальный зал» с навигацией по конспекту.
+templ ReaderPage(data LayoutData, vm ReaderVM) {
+	@Layout(data, ReaderActions(vm)) {
+		<div class="ll-reader" id="reader">
+			<div class="ll-reader-progress" aria-hidden="true"><div id="readerProgress"></div></div>
+			<div class="ll-reader-search" id="readerSearch" hidden>
+				<label class="ll-reader-search-field">
+					<span class="sr-only">Поиск по конспекту</span>
+					<input id="readerSearchInput" type="search" placeholder="Искать по конспекту…" autocomplete="off"/>
+				</label>
+				<span id="readerSearchCount" class="ll-reader-search-count"></span>
+				<button type="button" class="ll-reader-text-button" id="readerSearchPrev">Назад</button>
+				<button type="button" class="ll-reader-text-button" id="readerSearchNext">Вперёд</button>
+				<button type="button" class="ll-icon-btn" id="readerSearchClose" aria-label="Закрыть поиск">×</button>
+			</div>
+			<div class="ll-reader-layout">
+				<aside class="ll-reader-sidebar" aria-label="Оглавление">
+					<div class="ll-reader-source-card">
+						<span class="ll-badge ll-badge--muted">{ readerSourceLabel(vm.SourceKind) }</span>
+						<strong>{ vm.SourceTitle }</strong>
+						<span>{ readerDurationLabel(vm.Duration) }</span>
+						if vm.IsOwner {
+							<span class="ll-reader-owner">Владелец</span>
+						}
+					</div>
+					<div class="ll-reader-reading"><span>Прочитано</span><strong id="readerReadPercent">0%</strong><div><i id="readerReadBar"></i></div></div>
+					<nav class="ll-reader-toc">
+						<p>Содержание</p>
+						for _, section := range vm.Sections {
+							<div class="ll-reader-toc-section">
+								<div><span>{ section.Number }</span><strong>{ section.Title }</strong></div>
+								<ul>
+									for _, sub := range section.Subtopics {
+										<li><a class="ll-reader-toc-link" href={ "#" + readerSubID(sub.Number) } data-target={ readerSubID(sub.Number) }><span>{ sub.Number }</span>{ sub.Title }</a></li>
+									}
+								</ul>
+							</div>
+						}
+					</nav>
+				</aside>
+				<article class="ll-reader-article" id="readerContent">
+					<header class="ll-reader-doc-head">
+						<p>Конспект лекции</p>
+						<h1>{ vm.Title }</h1>
+						<div>{ vm.SourceTitle } · { readerDurationLabel(vm.Duration) }</div>
+					</header>
+					<div class="ll-reader-timeline">
+						for _, section := range vm.Sections {
+							<section class="ll-reader-section">
+								<header class="ll-reader-section-head"><span>{ section.Number }</span><h2>{ section.Title }</h2></header>
+								for _, sub := range section.Subtopics {
+									<section class="ll-reader-sub" id={ readerSubID(sub.Number) }>
+										<header><span>{ sub.Number }</span><h3>{ sub.Title }</h3></header>
+										if sub.Media != nil {
+											@ReaderMedia(*sub.Media)
+										}
+										<div class="ll-reader-prose">
+											// ContentHTML уже санитизирован goldmark в B2 (без unsafe-HTML) — Raw безопасен
+											@templ.Raw(sub.ContentHTML)
+										</div>
+										for _, slideURL := range sub.SlideURLs {
+											<figure class="ll-reader-slide"><img src={ slideURL } alt={ "Слайд: " + sub.Title } loading="lazy"/><figcaption>Открыть слайд</figcaption></figure>
+										}
+									</section>
+								}
+							</section>
+						}
+					</div>
+					<footer class="ll-reader-foot">LectureLog · Конспект лекции</footer>
+				</article>
+			</div>
+			<div class="ll-reader-lightbox" id="readerLightbox" role="dialog" aria-modal="true" aria-label="Просмотр слайда" hidden>
+				<button type="button" class="ll-reader-lightbox-close" aria-label="Закрыть просмотр слайда">×</button>
+			</div>
+		</div>
+		<script src="/static/js/reader.js" defer></script>
+	}
+}
+
+// ReaderActions — действия в правой части шапки читалки.
+templ ReaderActions(vm ReaderVM) {
+	<button type="button" class="ll-icon-btn" id="readerSearchButton" aria-label="Поиск по конспекту">⌕</button>
+	<a class="ll-reader-export" href={ "/read/" + vm.LectureID + "/export" }>Экспорт</a>
+}
+
+// ReaderMedia — нативный медиа-плеер с временным диапазоном фрагмента.
+templ ReaderMedia(media ReaderMediaVM) {
+	<div class="ll-reader-player" data-start={ fmt.Sprintf("%d", media.Start) } data-end={ fmt.Sprintf("%d", media.End) }>
+		<div><span class="ll-reader-media-kind">{ readerSourceLabel(media.Kind) }</span><span>{ readerTimeRange(media.Start, media.End) }</span></div>
+		if media.Kind == "video" {
+			<video preload="metadata" src={ media.URL } controls></video>
+		} else {
+			<audio preload="metadata" src={ media.URL } controls></audio>
+		}
+	</div>
+}
+
+// readerSubID формирует стабильный якорь подтемы для TOC и scroll-spy.
+func readerSubID(number string) string {
+	return "s-" + strings.ReplaceAll(number, ".", "-")
+}
+
+// readerDurationLabel форматирует длительность в компактный вид.
+func readerDurationLabel(seconds int) string {
+	if seconds < 60 {
+		return fmt.Sprintf("%d сек", seconds)
+	}
+	return fmt.Sprintf("%d мин", seconds/60)
+}
+
+// readerTimeRange форматирует границы медиафрагмента.
+func readerTimeRange(start, end int) string {
+	return readerClock(start) + " – " + readerClock(end)
+}
+
+// readerClock форматирует время как MM:SS.
+func readerClock(seconds int) string {
+	return fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
+}
+
+// readerSourceLabel возвращает локализованную метку типа источника.
+func readerSourceLabel(kind string) string {
+	if kind == "audio" {
+		return "Аудио"
+	}
+	return "Видео"
+}

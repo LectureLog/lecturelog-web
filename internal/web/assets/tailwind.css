@@ -63,6 +63,71 @@
   Используют только var(--token) — без хардкод-цветов.
 */
 @layer components {
+
+  /* ─── Компоненты страницы читалки ───────────────────────────────────────── */
+  .ll-reader { font-family: var(--font-sans); color: var(--ink); }
+  .ll-reader-progress { position: fixed; top: 58px; left: 0; z-index: 55; width: 100%; height: 3px; background: var(--rail); }
+  .ll-reader-progress > div { width: 0; height: 100%; background: var(--accent); transition: width .12s linear; }
+  .ll-reader-export, .ll-reader-text-button { border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--surface); color: var(--text-2); font: 600 13px var(--font-sans); text-decoration: none; cursor: pointer; padding: 8px 12px; }
+  .ll-reader-export:hover, .ll-reader-text-button:hover { color: var(--ink); border-color: var(--border-2); }
+  .ll-reader-search { display: flex; align-items: center; gap: 8px; margin: -34px -22px 28px; padding: 10px max(22px, calc((100% - 1240px) / 2 + 22px)); border-bottom: 1px solid var(--border); background: var(--bg-2); }
+  .ll-reader-search-field { flex: 1; }
+  .ll-reader-search input { width: 100%; padding: 10px 13px; border: 1px solid var(--border-2); border-radius: var(--r-btn); outline: none; background: var(--surface); color: var(--ink); font: 14px var(--font-sans); }
+  .ll-reader-search input:focus { border-color: var(--accent); }
+  .ll-reader-search-count { min-width: 58px; color: var(--text-3); font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+  .ll-reader-layout { display: flex; gap: 54px; align-items: flex-start; }
+  .ll-reader-sidebar { position: sticky; top: 82px; flex: 0 0 280px; max-height: calc(100vh - 100px); overflow: auto; padding: 4px 12px 24px 0; }
+  .ll-reader-source-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); font-size: 13px; color: var(--text-2); }
+  .ll-reader-source-card strong { color: var(--ink); font-size: 14px; }
+  .ll-reader-owner { color: var(--accent); font-weight: 600; }
+  .ll-reader-reading { margin: 20px 0 25px; color: var(--text-3); font-size: 12px; }
+  .ll-reader-reading strong { float: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
+  .ll-reader-reading div { clear: both; height: 4px; margin-top: 9px; overflow: hidden; border-radius: var(--r-track); background: var(--rail); }
+  .ll-reader-reading i { display: block; width: 0; height: 100%; background: var(--accent); }
+  .ll-reader-toc > p { margin: 0 0 12px; color: var(--text-3); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .ll-reader-toc-section + .ll-reader-toc-section { margin-top: 10px; }
+  .ll-reader-toc-section > div { display: flex; gap: 9px; color: var(--text-2); font-size: 13px; }
+  .ll-reader-toc-section > div span, .ll-reader-toc-link span { flex: none; color: var(--text-3); font-variant-numeric: tabular-nums; }
+  .ll-reader-toc-section ul { margin: 6px 0 0 9px; padding: 0 0 0 12px; border-left: 1px solid var(--border); list-style: none; }
+  .ll-reader-toc-link { display: flex; gap: 8px; padding: 6px 0 6px 10px; border-left: 2px solid transparent; color: var(--text-2); font-size: 13px; line-height: 1.4; text-decoration: none; }
+  .ll-reader-toc-link:hover, .ll-reader-toc-link.active { border-left-color: var(--accent); color: var(--accent); }
+  .ll-reader-article { width: min(100%, 720px); padding-bottom: 60px; }
+  .ll-reader-doc-head { padding: 12px 0 46px; border-bottom: 1px solid var(--border); }
+  .ll-reader-doc-head p { margin: 0 0 10px; color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+  .ll-reader-doc-head h1 { margin: 0; color: var(--ink); font: 600 clamp(34px, 5vw, 52px)/1.08 var(--font-serif); letter-spacing: -.025em; }
+  .ll-reader-doc-head div { margin-top: 17px; color: var(--text-3); font-size: 14px; }
+  .ll-reader-timeline { position: relative; margin-top: 45px; padding-left: 32px; border-left: 1px solid var(--rail); }
+  .ll-reader-section + .ll-reader-section { margin-top: 58px; }
+  .ll-reader-section-head { display: flex; gap: 15px; align-items: baseline; margin-left: -33px; }
+  .ll-reader-section-head span { color: var(--accent); font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .ll-reader-section-head h2 { margin: 0; font: 600 27px/1.22 var(--font-serif); letter-spacing: -.015em; }
+  .ll-reader-sub { position: relative; margin-top: 35px; scroll-margin-top: 82px; }
+  .ll-reader-sub::before { position: absolute; top: 9px; left: -37px; width: 9px; height: 9px; border: 2px solid var(--bg); border-radius: 50%; background: var(--accent); content: ""; }
+  .ll-reader-sub > header { display: flex; gap: 12px; align-items: baseline; }
+  .ll-reader-sub > header span { color: var(--text-3); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .ll-reader-sub h3 { margin: 0; color: var(--ink); font: 600 22px/1.3 var(--font-serif); }
+  .ll-reader-prose { color: var(--text-2); font: 18px/1.72 var(--font-serif); }
+  .ll-reader-prose > :first-child { margin-top: 15px; }
+  .ll-reader-prose a { color: var(--accent); }
+  .ll-reader-prose blockquote, .ll-reader-prose details { margin: 18px 0; padding: 14px 17px; border-left: 3px solid var(--accent); border-radius: 0 var(--r-card) var(--r-card) 0; background: var(--accent-soft); }
+  .ll-reader-player { margin-top: 18px; padding: 13px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); }
+  .ll-reader-player > div { display: flex; justify-content: space-between; margin-bottom: 9px; color: var(--text-3); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .ll-reader-media-kind { color: var(--accent); font-weight: 700; }
+  .ll-reader-player audio, .ll-reader-player video { display: block; width: 100%; max-height: 330px; }
+  .ll-reader-slide { margin: 22px 0; overflow: hidden; border: 1px solid var(--border); border-radius: var(--r-slide); background: var(--surface); }
+  .ll-reader-slide img { display: block; width: 100%; cursor: zoom-in; }
+  .ll-reader-slide figcaption { padding: 9px 13px; color: var(--text-3); font-size: 12px; }
+  .ll-reader-foot { margin-top: 58px; padding-top: 18px; border-top: 1px solid var(--border); color: var(--text-3); font-size: 12px; }
+  .ll-reader-lightbox[hidden] { display: none; }
+  .ll-reader-lightbox { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: 4vw; background: color-mix(in srgb, var(--ink) 76%, transparent); cursor: zoom-out; }
+  .ll-reader-lightbox img { max-width: 100%; max-height: 90vh; border-radius: var(--r-slide); box-shadow: var(--shadow); }
+  .ll-reader-lightbox-close { position: absolute; top: 22px; right: 22px; min-width: 40px; min-height: 40px; border: 1px solid var(--bg); border-radius: var(--r-btn); color: var(--bg); cursor: pointer; font-size: 28px; line-height: 1; }
+  .ll-reader-lightbox-close:focus-visible { outline: 2px solid var(--bg); outline-offset: 3px; }
+  .ll-reader-prose mark { background: var(--mark); color: var(--ink); }
+  .ll-reader-prose mark.ll-reader-mark-current { background: var(--mark-cur); }
+  @media (max-width: 880px) { .ll-reader-layout { display: block; } .ll-reader-sidebar { position: static; max-height: none; width: 100%; padding: 0; margin-bottom: 34px; } .ll-reader-article { width: 100%; } }
+  @media (max-width: 620px) { .ll-reader-search { margin-inline: -13px; padding-inline: 13px; } .ll-reader-search-count, .ll-reader-search .ll-reader-text-button { display: none; } .ll-reader-layout { gap: 0; } .ll-reader-timeline { padding-left: 26px; } .ll-reader-sub::before { left: -31px; } .ll-reader-doc-head h1 { font-size: 35px; } }
+
   /* Шапка: sticky 58px, blur-фон, нижняя граница */
   .ll-topbar {
     position: sticky;
