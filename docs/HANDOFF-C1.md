@@ -7,16 +7,18 @@
 > (gofmt, git, ворота) — сам.
 
 ## База волны
-- `integration` = `49e2b29` (после C0 + C1-lecture + **C1-upload** + **C1-sync** +
-  **C1-devstack** + **C1-hub** + полного **C1-reader**). origin синхронен по
-  C0 (2ef594f..0507824) + e750cb7; C1-атомы накапливаются в integration (PR/push в main — в конце волны).
+- `integration` = `f49b633` (после C0 + C1-lecture + **C1-upload** + **C1-sync** +
+  **C1-devstack** + **C1-hub** + полного **C1-reader** + внепланового **dev-deploy**). origin
+  СИНХРОНЕН по `integration` (запушен `f49b633`); PR в `main` отложен (владелец выбрал только push).
 - Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt, gen-check exit 0; integration-БД-тесты hub
   прогнаны реально 82с), worktree-ов нет. Безопасная граница.
 
-## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-26): кодовые атомы C1 завершены
+## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-26, 3): кодовые атомы C1 завершены + dev-deploy + push
 Завершён **C1-reader**: бэкенд A/B1/B2 (merge `3b306c4`), UI C (merge `f2111fa`) и проводка D
 (merge `49e2b29`). Витрина `/hub` ведёт на `/read/{id}`. Маршруты чтения и экспорта смонтированы
 вне `RequireAuth` под `LoadSession`; сервис не раскрывает наличие чужой private-лекции (404).
+Добавлен **dev-deploy** (merge `f49b633`) — два режима запуска web. `integration` ЗАПУШЕН в origin.
+**СЛЕДУЮЩИЙ ШАГ:** владелец поднимает РЕАЛЬНОЕ ядро в Docker → прогнать GATE C1 e2e (см. ниже).
 
 ### C1-reader — итог под-атомов C и D
 - **C (UI):** `page_reader.templ`, `web.ReaderVM`, `reader.js` (scroll-spy, прогресс, плееры,
@@ -32,8 +34,33 @@
 | app.css | `dd2fc11` (`fix(web)`: детерминизм Tailwind-purge) | — |
 | D — проводка | `ec3e724`, `bfafbda`, `bb30f0a`; `da56d3d`; `3ae1f62` | `49e2b29` |
 
-**GATE C1 e2e:** реальный сквозной reader по-прежнему заблокирован ядром: нет эндпоинта
-`structure.json`. Это gate волны, не блокер завершённого атома.
+**GATE C1 e2e:** реальный сквозной reader был заблокирован ядром (нет эндпоинта `structure.json`).
+Владелец поднимает РЕАЛЬНОЕ ядро в Docker → теперь e2e можно прогнать. Сценарий: вход Google →
+загрузка лекции → ядро обрабатывает → вебхук ready → `/hub` → читалка `/read/{id}`. ⚠️ Контракт
+JSON-тегов `structure.json` — мой из §6 (см. `internal/reader/structure.go` + фикстуры
+`internal/reader/testdata/`), МОЖЕТ разойтись с реальной сериализацией ядра → при первом прогоне
+сверить; если теги другие — поправить парсер (через LOOP-исполнителя). Запуск web для e2e — см.
+раздел «dev-deploy» ниже и README («Запуск», два режима).
+
+### ✅ ВНЕПЛАНОВЫЙ АТОМ dev-deploy — два режима запуска web (merge `f49b633`, 2026-06-26)
+По просьбе владельца («две версии: dev для быстрых правок + prod одной кнопкой»). Web запускается
+ЛОКАЛЬНО (go run), ядро владельца — в Docker.
+- **DEV (быстрые правки):** `.air.toml` + `make watch` (air hot-reload, пересборка go при правке;
+  templ/css — вручную `make templ`/`make tailwind`) или `make dev` (go run, fallback). MinIO-заглушка
+  вынесена в профиль `stub-minio`: `make up` = только Postgres; `make up-stub` = Postgres + MinIO-заглушка.
+- **PROD («одной кнопкой»):** `Dockerfile` (multi-stage golang:1.25→alpine:3.22, CGO off, ca-certificates,
+  генераты уже в репо → нужен только `go build`; образ 53МБ, СОБРАН И ПРОВЕРЕН — стартует, fail-fast
+  конфига работает) + `docker-compose.prod.yml` (web+postgres, `host.docker.internal:host-gateway` для
+  доступа к ядру, override `PLATFORM_DB_DSN` на сервис `postgres`) + `make prod` (`up -d --build`),
+  `make prod-down`. `.dockerignore` исключает `.env` (секреты не в образ; `env_file` подхватывается compose).
+- **.env.example** имеет пресет «e2e с реальным ядром»: `CORE_API_BASE_URL`/`CORE_MINIO_*` → на ядро.
+  ⚠️ `CORE_MINIO_ENDPOINT` должен быть достижим ИЗ БРАУЗЕРА (presigned-ссылки используют этот host).
+- Грабли этой работы (app.css дрейф, снос worktree с bin-каталогом, prod-compose требует .env) —
+  см. `HANDOFF-NEXT-ORCHESTRATOR.md` раздел ГРАБЛИ, пункты 11–13.
+
+| атом | ключевые файлы | merge |
+|---|---|---|
+| dev-deploy | `Dockerfile`, `docker-compose.prod.yml`, `.air.toml`, `.dockerignore`, `Makefile`(watch/up-stub/prod), `.env.example`, `README` | `f49b633` (`9e9ffef`+`d64cf23`) |
 
 ### ⚠️ НОВАЯ СХЕМА РОЛЕЙ + ГРАБЛЯ КОММИТОВ CODEX (распоряжение владельца 2026-06-26)
 Владелец уточнил схему: **Codex билдит И КОММИТИТ сам → ОТДЕЛЬНЫЙ агент проверяет код → оркестратор
