@@ -1,0 +1,71 @@
+package web
+
+// HubCardVM — view-модель карточки публичной лекции витрины.
+type HubCardVM struct {
+	ID              string
+	Title           string
+	SourceKind      string
+	SourceLabel     string
+	AuthorName      string
+	AuthorAvatarURL string
+	PublishedAt     string
+	ReadURL         string
+}
+
+// HubPage — публичная витрина лекций.
+templ HubPage(data LayoutData, vms []HubCardVM, authed bool) {
+	@Layout(data, hubTopActions(authed)) {
+		<section class="ll-lectures-section">
+			if len(vms) == 0 {
+				@HubEmpty()
+			} else {
+				<div class="ll-lec-grid">
+					for _, vm := range vms {
+						@HubCard(vm)
+					}
+				</div>
+			}
+		</section>
+	}
+}
+
+// HubCard — карточка публичной лекции со ссылкой в читалку.
+templ HubCard(vm HubCardVM) {
+	<a class="ll-lec-card ll-hub-card" href={ vm.ReadURL }>
+		<div class="ll-lec-card-top">
+			<span class="ll-badge ll-badge--muted">{ vm.SourceLabel }</span>
+		</div>
+		<div class="ll-lec-card-body">
+			<h3 class="ll-lec-title">{ vm.Title }</h3>
+		</div>
+		<div class="ll-lec-card-footer">
+			<span class="ll-hub-author">
+				if vm.AuthorAvatarURL != "" {
+					<img class="ll-hub-avatar" src={ vm.AuthorAvatarURL } alt=""/>
+				}
+				<span>{ vm.AuthorName }</span>
+			</span>
+			<span class="ll-lec-meta">{ vm.PublishedAt }</span>
+		</div>
+	</a>
+}
+
+// HubEmpty — пустое состояние публичной витрины.
+templ HubEmpty() {
+	<div class="ll-empty">
+		<div class="ll-empty-icon">
+			@iconBook()
+		</div>
+		<h2 class="ll-empty-title">Пока нет публичных лекций</h2>
+		<p class="ll-empty-text">Опубликованные лекции появятся здесь.</p>
+	</div>
+}
+
+// hubTopActions выбирает действие в шапке для авторизованного и анонимного посетителя.
+templ hubTopActions(authed bool) {
+	if authed {
+		<a href="/lectures" class="ll-btn">Мои лекции</a>
+	} else {
+		<a href="/auth/login" class="ll-btn">Войти</a>
+	}
+}
