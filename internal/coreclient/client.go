@@ -143,6 +143,25 @@ func (c *CoreClient) GetTaskStatus(ctx context.Context, taskID string) (TaskStat
 	return TaskStatus{}, fmt.Errorf("coreclient: неожиданный код от ядра на статусе: %d", resp.StatusCode())
 }
 
+// GetResultURL возвращает временную ссылку на артефакт результата задачи.
+func (c *CoreClient) GetResultURL(ctx context.Context, taskID, filename string) (string, error) {
+	var params *GetTaskResultUrlApiV1TasksTaskIdResultUrlGetParams
+	if filename != "" {
+		params = &GetTaskResultUrlApiV1TasksTaskIdResultUrlGetParams{Filename: &filename}
+	}
+	resp, err := c.api.GetTaskResultUrlApiV1TasksTaskIdResultUrlGetWithResponse(ctx, taskID, params)
+	if err != nil {
+		return "", fmt.Errorf("coreclient: запрос ссылки результата: %w", err)
+	}
+	if resp.JSON200 != nil {
+		return resp.JSON200.Url, nil
+	}
+	if resp.StatusCode() == 404 {
+		return "", ErrTaskNotFound
+	}
+	return "", fmt.Errorf("coreclient: неожиданный код от ядра на ссылке результата: %d", resp.StatusCode())
+}
+
 // DeleteTask удаляет задачу. Контракт идемпотентен: успех — 204 (в т.ч. на
 // повторном удалении уже удалённой задачи) -> nil.
 func (c *CoreClient) DeleteTask(ctx context.Context, taskID string) error {

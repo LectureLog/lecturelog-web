@@ -250,6 +250,41 @@ func TestGetTaskStatus_NotFound(t *testing.T) {
 	}
 }
 
+func TestGetResultURL(t *testing.T) {
+	var filename string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/tasks/task-123/result-url" {
+			t.Fatalf("path = %q", r.URL.Path)
+		}
+		filename = r.URL.Query().Get("filename")
+		writeJSON(w, http.StatusOK, ResultUrlResponse{Url: "https://storage.example/result.zip", ExpiresIn: 300})
+	}))
+	t.Cleanup(srv.Close)
+
+	url, err := newTestClient(t, srv.URL).GetResultURL(context.Background(), "task-123", "result.zip")
+	if err != nil {
+		t.Fatalf("GetResultURL: %v", err)
+	}
+	if url != "https://storage.example/result.zip" || filename != "result.zip" {
+		t.Fatalf("url=%q filename=%q", url, filename)
+	}
+}
+
+func TestGetResultURL_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.RawQuery != "" {
+			t.Fatalf("пустое имя не должно передавать query: %q", r.URL.RawQuery)
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	_, err := newTestClient(t, srv.URL).GetResultURL(context.Background(), "missing", "")
+	if !errors.Is(err, ErrTaskNotFound) {
+		t.Fatalf("ожидался ErrTaskNotFound, получили %v", err)
+	}
+}
+
 func TestDeleteTask(t *testing.T) {
 	m := newMockCore(t)
 	c := newTestClient(t, m.srv.URL)
