@@ -12,6 +12,9 @@ import (
 // ErrTaskNotFound возвращается, когда ядро отвечает 404 на запрос статуса задачи.
 var ErrTaskNotFound = errors.New("coreclient: задача не найдена")
 
+// ErrResultURLEmpty возвращается, когда ядро вернуло успешный ответ без ссылки на результат.
+var ErrResultURLEmpty = errors.New("coreclient: ядро вернуло пустую ссылку результата")
+
 // UploadResult — доменный результат presigned-PUT (POST /uploads).
 type UploadResult struct {
 	Key       string // ключ объекта в S3 (начинается с uploads/)
@@ -141,6 +144,28 @@ func (c *CoreClient) GetTaskStatus(ctx context.Context, taskID string) (TaskStat
 		return TaskStatus{}, ErrTaskNotFound
 	}
 	return TaskStatus{}, fmt.Errorf("coreclient: неожиданный код от ядра на статусе: %d", resp.StatusCode())
+}
+
+// GetResultURL возвращает временную ссылку на артефакт результата задачи.
+func (c *CoreClient) GetResultURL(ctx context.Context, taskID, filename string) (string, error) {
+	var params *GetTaskResultUrlApiV1TasksTaskIdResultUrlGetParams
+	if filename != "" {
+		params = &GetTaskResultUrlApiV1TasksTaskIdResultUrlGetParams{Filename: &filename}
+	}
+	resp, err := c.api.GetTaskResultUrlApiV1TasksTaskIdResultUrlGetWithResponse(ctx, taskID, params)
+	if err != nil {
+		return "", fmt.Errorf("coreclient: запрос ссылки результата: %w", err)
+	}
+	if resp.JSON200 != nil {
+		if resp.JSON200.Url == "" {
+			return "", ErrResultURLEmpty
+		}
+		return resp.JSON200.Url, nil
+	}
+	if resp.StatusCode() == 404 {
+		return "", ErrTaskNotFound
+	}
+	return "", fmt.Errorf("coreclient: неожиданный код от ядра на ссылке результата: %d", resp.StatusCode())
 }
 
 // DeleteTask удаляет задачу. Контракт идемпотентен: успех — 204 (в т.ч. на

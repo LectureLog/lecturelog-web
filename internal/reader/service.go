@@ -7,23 +7,9 @@ import (
 
 // Load проверяет доступ и собирает модель читального зала.
 func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderView, error) {
-	lecture, err := s.repo.FindByID(ctx, lectureID)
+	lecture, isOwner, err := s.accessLecture(ctx, lectureID, viewerID)
 	if err != nil {
-		return ReaderView{}, fmt.Errorf("найти лекцию: %w", err)
-	}
-	if lecture == nil {
-		return ReaderView{}, ErrNotFound
-	}
-
-	isOwner := viewerID != "" && viewerID == lecture.OwnerID
-	if lecture.Status != "ready" {
-		if isOwner {
-			return ReaderView{}, ErrNotReady
-		}
-		return ReaderView{}, ErrNotFound
-	}
-	if lecture.Visibility == "private" && !isOwner {
-		return ReaderView{}, ErrNotFound
+		return ReaderView{}, err
 	}
 
 	structureKey := "results/" + lecture.CoreTaskID + "/structure.json"
@@ -62,6 +48,38 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 	}
 
 	return view, nil
+}
+
+// AccessTaskID проверяет доступ к лекции и возвращает идентификатор задачи ядра.
+func (s *Service) AccessTaskID(ctx context.Context, lectureID, viewerID string) (string, error) {
+	lecture, _, err := s.accessLecture(ctx, lectureID, viewerID)
+	if err != nil {
+		return "", err
+	}
+	return lecture.CoreTaskID, nil
+}
+
+// accessLecture централизует проверку доступа для чтения и экспорта.
+func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string) (*LectureMeta, bool, error) {
+	lecture, err := s.repo.FindByID(ctx, lectureID)
+	if err != nil {
+		return nil, false, fmt.Errorf("найти лекцию: %w", err)
+	}
+	if lecture == nil {
+		return nil, false, ErrNotFound
+	}
+
+	isOwner := viewerID != "" && viewerID == lecture.OwnerID
+	if lecture.Status != "ready" {
+		if isOwner {
+			return nil, false, ErrNotReady
+		}
+		return nil, false, ErrNotFound
+	}
+	if lecture.Visibility == "private" && !isOwner {
+		return nil, false, ErrNotFound
+	}
+	return lecture, isOwner, nil
 }
 
 func (s *Service) buildSubtopic(ctx context.Context, sectionNumber, subtopicNumber int, subtopic Subtopic) (ViewSubtopic, error) {

@@ -23,6 +23,8 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/db"
 	"github.com/LectureLog/lecturelog-web/internal/hub"
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
+	"github.com/LectureLog/lecturelog-web/internal/reader"
+	"github.com/LectureLog/lecturelog-web/internal/s3"
 	"github.com/LectureLog/lecturelog-web/internal/syncsvc"
 	"github.com/LectureLog/lecturelog-web/internal/upload"
 	"github.com/LectureLog/lecturelog-web/internal/web"
@@ -180,6 +182,24 @@ func main() {
 		&coreTasksAdapter{core: core},
 	)
 	hubSvc := hub.NewService(&hubRepo{lectures: lectureDB}, 0)
+	s3Client, err := s3.New(s3.Config{
+		Endpoint:  cfg.CoreMinIO.Endpoint,
+		AccessKey: cfg.CoreMinIO.AccessKey,
+		SecretKey: cfg.CoreMinIO.SecretKey,
+		Bucket:    cfg.CoreMinIO.Bucket,
+		UseSSL:    cfg.CoreMinIO.UseSSL,
+	})
+	if err != nil {
+		log.Fatalf("s3.New: %v", err)
+	}
+	readerSvc := reader.NewService(
+		&readerRepo{lectures: lectureDB},
+		s3Client,
+		s3Client,
+		reader.NewMarkdownRenderer(),
+		cfg.PresignedTTL,
+	)
+	readerHandlers := reader.NewHandlers(readerSvc, core)
 
 	// CSRF-ключ генерируется на старте (32 случайных байта).
 	// ДОЛГ: для прод-стабильности вынести в env (PLATFORM_CSRF_KEY) — рестарт инвалидирует токены.
@@ -258,6 +278,9 @@ func main() {
 		}),
 		web.WithMount(func(r chi.Router) {
 			hubSvc.Mount(r) // GET /hub доступен анонимным посетителям
+		}),
+		web.WithMount(func(r chi.Router) {
+			readerHandlers.Mount(r) // GET /read/{id} доступен анонимным посетителям
 		}),
 		web.WithMount(func(r chi.Router) {
 			// Группа под RequireAuth: только аутентифицированные пользователи
@@ -425,6 +448,34 @@ func (r *hubRepo) ListPublic(ctx context.Context, limit int) ([]hub.PublicLectur
 
 // _ — проверка на этапе компиляции: hubRepo реализует hub.Repository.
 var _ hub.Repository = (*hubRepo)(nil)
+
+// ─── Адаптер для reader.LectureRepo ────────────────────────────────────────
+
+// readerRepo реализует reader.LectureRepo поверх db.LectureDB.
+type readerRepo struct {
+	lectures *db.LectureDB
+}
+
+func (r *readerRepo) FindByID(ctx context.Context, id string) (*reader.LectureMeta, error) {
+	row, err := r.lectures.FindByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if row == nil {
+		return nil, nil
+	}
+	return &reader.LectureMeta{
+		ID:         row.LectureID,
+		OwnerID:    row.OwnerID,
+		Status:     row.Status,
+		Visibility: row.Visibility,
+		CoreTaskID: row.CoreTaskID,
+		Title:      row.Title,
+		SourceKind: row.SourceKind,
+	}, nil
+}
+
+var _ reader.LectureRepo = (*readerRepo)(nil)
 
 // ─── Адаптер для upload.Repository ──────────────────────────────────────────
 
