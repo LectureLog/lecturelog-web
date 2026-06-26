@@ -7,67 +7,33 @@
 > (gofmt, git, ворота) — сам.
 
 ## База волны
-- `integration` = `3b306c4` (после C0 + C1-lecture + **C1-upload** + **C1-sync** +
-  **C1-devstack** + **C1-hub** + docs `11bbd48` + **C1-reader БЭКЕНД A/B1/B2**). origin синхронен по
+- `integration` = `49e2b29` (после C0 + C1-lecture + **C1-upload** + **C1-sync** +
+  **C1-devstack** + **C1-hub** + полного **C1-reader**). origin синхронен по
   C0 (2ef594f..0507824) + e750cb7; C1-атомы накапливаются в integration (PR/push в main — в конце волны).
 - Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt, gen-check exit 0; integration-БД-тесты hub
   прогнаны реально 82с), worktree-ов нет. Безопасная граница.
 
-## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-26, 2): остались ТОЛЬКО reader-UI (C) и reader-проводка (D)
-ВЫПОЛНЕНО в этой сессии (2026-06-26): **C1-devstack** (merge ddc0b6d), **C1-hub** (merge 0ce083f,
-независимо проверен — безопасность чистая), docs (11bbd48), и **БЭКЕНД C1-reader** — под-атомы A/B1/B2
-(merge 3b306c4): пакет `internal/s3` (локальный presigned-GET + GetObject поверх MinIO, нов. зав-ть
-`minio-go/v7`), `internal/reader/structure.go` (схема structure.json + парсер + фикстуры),
-`internal/reader` сервис доступа (матрица прав + presign 24ч + goldmark БЕЗ unsafe-HTML, нов. зав-ть
-`goldmark`). Ворота зелёные, s3-integration-тест компилируется за тегом (реальный MinIO — на e2e-GATE).
+## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-26): кодовые атомы C1 завершены
+Завершён **C1-reader**: бэкенд A/B1/B2 (merge `3b306c4`), UI C (merge `f2111fa`) и проводка D
+(merge `49e2b29`). Витрина `/hub` ведёт на `/read/{id}`. Маршруты чтения и экспорта смонтированы
+вне `RequireAuth` под `LoadSession`; сервис не раскрывает наличие чужой private-лекции (404).
 
-ОСТАЛОСЬ по C1-reader (ПЕРВОЕ ДЕЙСТВИЕ нового чата): под-атомы **C** (UI) и **D** (проводка) — см.
-раздел «C1-reader: ОСТАВШИЕСЯ под-атомы C и D» ниже. С завершением D витрина `/hub` получит рабочую
-ссылку `/lectures/{id}/read` (сейчас 404). Полный план reader — в истории Plan-агента; контракты бэкенда
-зафиксированы ниже.
+### C1-reader — итог под-атомов C и D
+- **C (UI):** `page_reader.templ`, `web.ReaderVM`, `reader.js` (scroll-spy, прогресс, плееры,
+  доступный lightbox, поиск), стили на дизайн-токенах и preview-харнесс за тегом `preview`.
+  `ContentHTML` рендерится через `templ.Raw` только после санации `goldmark` в бэкенде.
+- **D (проводка):** `handleRead`/`handleExport`, `AccessTaskID`, `coreclient.GetResultURL`,
+  `GET /read/{id}` и `GET /read/{id}/export`. Экспорт отвечает 302 на presigned-архив ядра;
+  ошибки: 404, 202 для обработки и мягкий 502 при недоступности ядра.
 
-### 🚧 C1-reader: ОСТАВШИЕСЯ под-атомы C и D
-**Готовые контракты бэкенда (НЕ менять без нужды):**
-- `reader.Service.Load(ctx, lectureID, viewerID string)(reader.ReaderView, error)` — viewerID=="" аноним.
-  Ошибки: `reader.ErrNotFound` (404/несуществует/нет прав — НЕ раскрывать), `reader.ErrNotReady`
-  (владельцу, лекция не ready), `reader.ErrCoreUnavailable` (structure.json не прочитан — мягкий 502).
-- `reader.NewService(repo LectureRepo, store ObjectStore, presign Presigner, md Renderer, ttl)` —
-  интерфейсы объявлены в `internal/reader/reader.go` (consumer-owned). `s3.Client` удовлетворяет
-  ObjectStore (GetObject) и Presigner (PresignGet); `reader.MarkdownRenderer` (goldmark) — Renderer;
-  адаптер поверх `db.LectureDB` (FindByID→`reader.LectureMeta`) — LectureRepo. ttl = `cfg.PresignedTTL` (24ч).
-- `reader.ReaderView{LectureID,Title,SourceTitle,SourceKind,Duration,IsOwner,Sections[]ViewSection}`;
-  `ViewSection{Number"01",Title,Subtopics}`; `ViewSubtopic{Number"1.1",Title,ContentHTML(санитизирован
-  goldmark — можно templ.Raw),Media*ViewMedia,SlideURLs[]string}`; `ViewMedia{Kind,Start,End,URL}` (URL presigned).
+| под-атом | пофазные коммиты | merge |
+|---|---|---|
+| C — UI | `74364af`, `a122976`, `9be4650`; `93f0b96`; `ccf198c` | `f2111fa` |
+| app.css | `dd2fc11` (`fix(web)`: детерминизм Tailwind-purge) | — |
+| D — проводка | `ec3e724`, `bfafbda`, `bb30f0a`; `da56d3d`; `3ae1f62` | `49e2b29` |
 
-**Под-атом C — UI читалки** (`internal/web`, БЕЗ изменения cmd/server):
-- `internal/web/page_reader.templ` + сгенерированный `_templ.go`: `web.ReaderVM` (shape согласуй с
-  маппингом ReaderView→VM в хендлере D) + компоненты по прототипу `design/prototypes/Конспект.dc.html`
-  (sidebar+TOC, doc-head, section→subtopic→player/slide/callout). `ContentHTML` через `templ.Raw`
-  (инвариант: уже санитизирован goldmark в B2 — впиши комментарий).
-- `internal/web/static/js/reader.js` (scroll-spy/progress, TOC nav, players preload=metadata, lightbox,
-  search, export) — проверь, что `js/*` уже в `//go:embed` (internal/web/static.go).
-- `internal/web/assets/tailwind.css` → классы читалки (токены, без хардкода) → `make tailwind`.
-- ГРАБЛЯ детерминизма: templ ТОЛЬКО из каталога пакета (`make templ`), app.css после `make web-gen`,
-  финальный коммит после генерации, `make gen-check` ОБЯЗАТЕЛЕН.
-
-**Под-атом D — проводка + handlers + Export** (`cmd/server`, `internal/reader/handlers.go`, `internal/coreclient`):
-- `cmd/server/main.go`: построить `s3.New(cfg.CoreMinIO...)`, `reader.NewService(...)`, адаптер
-  `readerRepo` (FindByID поверх db.LectureDB → reader.LectureMeta), `var _ reader.LectureRepo=...`.
-  Монтаж `GET /read/{id}` (+`/read/{id}/export`) **ВНЕ группы RequireAuth** (под LoadSession; доступ —
-  внутри сервиса). НЕ под RequireAuth — иначе аноним не прочитает public.
-- `internal/reader/handlers.go` + handlers_test.go (httptest): handleRead (viewerID из auth.UserFromContext
-  или ""; Load; ErrNotFound→404, ErrNotReady→экран «обрабатывается», ErrCoreUnavailable→**мягкий 502**,
-  не http.Error-стектрейс; иначе маппинг ReaderView→web.ReaderVM + web.ReaderPage). handleExport (presigned ZIP).
-- `internal/coreclient/client.go`: `GetResultURL(ctx, taskID, filename)(string,error)` поверх уже
-  сгенерированного `GetTaskResultUrlApiV1TasksTaskIdResultUrlGetWithResponse` (тип `ResultUrlResponse`) — Export ZIP.
-- Финальные ворота: `make web-gen && make gen-check && go build/vet/test`; gofmt; go mod tidy.
-
-**КРИТИЧНЫЙ РИСК reader (НЕ блокер атома, блокер e2e):** эндпоинта `structure.json` в ядре ПОКА НЕТ
-(§10.4 отложено), per-artifact presign в coreclient нет → платформа презайнит ЛОКАЛЬНО (internal/s3) и
-читает `results/<core_task_id>/structure.json` напрямую из MinIO. JSON-теги structure.json — мой контракт
-из §6, МОГУТ разойтись с реальной сериализацией ядра → сверить при появлении эталона. Реальный e2e reader
-заблокирован ядром. Долги: имя маршрута (/read/{id} — уточнить); browser-reachable MinIO endpoint
-(возможно отдельный публичный endpoint в config); error_code-каталог экранов.
+**GATE C1 e2e:** реальный сквозной reader по-прежнему заблокирован ядром: нет эндпоинта
+`structure.json`. Это gate волны, не блокер завершённого атома.
 
 ### ⚠️ НОВАЯ СХЕМА РОЛЕЙ + ГРАБЛЯ КОММИТОВ CODEX (распоряжение владельца 2026-06-26)
 Владелец уточнил схему: **Codex билдит И КОММИТИТ сам → ОТДЕЛЬНЫЙ агент проверяет код → оркестратор
@@ -158,7 +124,7 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
 | C1-devstack| ✅ | ✅ | ✅ | ✅ COMPLETE | — | — | ✅ в integration (ddc0b6d) | ✅ (этот коммит) |
 | C1-hub     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ | ✅ | ✅ в integration (0ce083f) | ✅ (этот коммит) |
 | C1-reader (бэкенд A/B1/B2) | ✅ | ✅ | ✅ | самопроверка матрицы доступа | — | — | ✅ в integration (3b306c4) | ✅ (этот коммит) |
-| C1-reader (UI=C + проводка=D) | ✅ (в плане) | ⏳ | ⏳ | | | | | |
+| C1-reader (UI=C + проводка=D) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ в integration (49e2b29) | ✅ (этот коммит) |
 
 ### C1-devstack — пофазные коммиты (merge ddc0b6d)
 | коммит | фаза |
@@ -209,7 +175,7 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
    Сделать `/hub` лендингом — отдельное решение/атом.
 2. **Серверной пагинации нет** — выдача ограничена потолком `limit=200` (`hub.defaultLimit`).
    Курсорная/offset-пагинация — долг при росте каталога.
-3. **Ссылка в читалку `/lectures/{id}/read`** (карточка витрины) ждёт C1-reader — до него 404.
+3. **Ссылка в читалку** карточки витрины ведёт на `/read/{id}`.
 
 ## C1-lecture — итог атома (смержен 48f55b3, docs b452a96)
 - **data-access `internal/db/lectures.go`**: тип `db.LectureRow`; `LectureDB{Pool}`; методы

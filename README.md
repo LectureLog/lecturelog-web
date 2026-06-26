@@ -256,6 +256,14 @@ func Load(getenv func(string) string) (*Config, error)
 - `LectureTitleInline(vm)` — inline-форма переименования (POST на rename).
 - `LectureVisibilityToggle(vm)` — тумблер видимости (POST на visibility).
 
+**Страница читалки (`page_reader.templ`).** `ReaderPage` получает `ReaderVM` и
+показывает конспект с оглавлением, прогрессом чтения, плеерами, слайдами и
+поиском. `reader.js` реализует scroll-spy оглавления, прогресс, lightbox слайдов
+с клавиатурной навигацией и поиск. HTML подтем передаётся через `templ.Raw`:
+он заранее санитизирован `goldmark` в пакете `internal/reader`. Стили читалки
+собраны на дизайн-токенах. Для визуальной проверки без ядра тест за тегом
+`preview` генерирует самодостаточный `reader-preview.html` из фикстуры.
+
 **CSRF в hx-headers (закрытие долга C0-web).** Добавлен `internal/web/csrf.go`:
 
 ```go
@@ -599,13 +607,29 @@ GET /hub   — публичная витрина лекций (visibility='publi
 ```
 
 Хендлер рендерит `web.HubPage` (карточки `web.HubCardVM`: автор, тип источника,
-дата публикации, ссылка в читалку `/lectures/{id}/read`).
+дата публикации, ссылка в читалку `/read/{id}`).
 
 **Известные ограничения (технический долг):**
 
 - `/hub` пока отдельная страница, а не лендинг `/`.
 - Серверной пагинации нет — выдача ограничена потолком `limit=200`.
-- Ссылка карточки в читалку `/lectures/{id}/read` ждёт атома C1-reader (до него — 404).
+
+## Пакет `internal/reader`
+
+Доменный модуль «Читальный зал»: загружает структуру конспекта `structure.json`,
+проверяет доступ к лекции, рендерит Markdown через `goldmark` без unsafe-HTML и
+выдаёт presigned-ссылки на медиа и слайды.
+
+```
+GET /read/{id}          — страница чтения; public-лекция доступна анонимно,
+                          private — только владельцу
+GET /read/{id}/export   — экспорт; 302 на presigned-архив результата ядра
+```
+
+Маршруты монтируются под глобальным `LoadSession`, вне `RequireAuth`: доступ
+проверяет сервис. Чужая private-лекция и отсутствующая лекция возвращают один
+404. Не готовая лекция возвращает 202 с экраном обработки; недоступность ядра —
+мягкий 502 без стектрейса.
 
 ## Точка входа `cmd/server`
 
@@ -614,7 +638,8 @@ GET /hub   — публичная витрина лекций (visibility='publi
 ```
 config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.NewService
   → lecture.NewService (coreTasksAdapter) → upload.NewService (uploadRepo, Signer)
-  → syncsvc.NewService (syncRepo, coreStatusAdapter) → web.NewRouter → ListenAndServe
+  → syncsvc.NewService (syncRepo, coreStatusAdapter) → reader.NewService (readerRepo, s3)
+  → reader.NewHandlers → web.NewRouter → ListenAndServe
 ```
 
 **`dbAdapter`** — адаптер из `cmd/server`, реализует `auth.Repository` поверх
@@ -637,6 +662,10 @@ config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.Ne
 **`hubRepo`** — реализует `hub.Repository` поверх `db.LectureDB` (`ListPublic`).
 Проверяется compile-time. Витрина `/hub` монтируется вне `RequireAuth`-группы.
 
+**`readerRepo`** — реализует `reader.LectureRepo` поверх `db.LectureDB`
+(`FindByID`). `reader.Service` использует `s3.Client` для чтения и presign,
+а `*coreclient.CoreClient` — для ссылки экспорта.
+
 Единственный экземпляр `*coreclient.CoreClient` (создаётся через `coreclient.New`)
 и единственный экземпляр `*db.LectureDB` разделяются между всеми адаптерами.
 
@@ -654,6 +683,7 @@ web.NewRouter(
     web.WithMount(func(r chi.Router) { r.Post("/webhooks/core", syncSvc.HandleWebhook) }),
     web.WithMount(func(r chi.Router) { authSvc.Mount(r) }),
     web.WithMount(func(r chi.Router) { hubSvc.Mount(r) }), // GET /hub — анонимам
+    web.WithMount(func(r chi.Router) { readerHandlers.Mount(r) }), // GET /read/{id} — доступ проверяет сервис
     web.WithMount(func(r chi.Router) {
         r.Group(func(pr chi.Router) {
             pr.Use(authSvc.RequireAuth)
@@ -802,7 +832,10 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
   анонимам. `db.LectureDB.ListPublic` (lectures⋈users), частичный индекс
   `idx_lectures_public_published_at`. `make gate` зелёный.
 
-  Следующий и последний атом волны C1: **reader** (страница чтения конспекта;
-  до него ссылка карточки витрины `/lectures/{id}/read` отдаёт 404).
+- **C1-reader** — `internal/reader` + `internal/s3` + UI и проводка: страница
+  чтения конспекта `GET /read/{id}`, доступная анонимам для public-лекций и
+  владельцу для private; экспорт `GET /read/{id}/export` перенаправляет на
+  presigned-архив ядра. Карточки `/hub` ведут на `/read/{id}`. Реальный сквозной
+  e2e остаётся заблокированным ядром: эндпоинт `structure.json` ещё не доступен.
 
 Подробности — в `docs/WORKFLOW.md` и `docs/TASKS.md`.
