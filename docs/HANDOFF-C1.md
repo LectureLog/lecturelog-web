@@ -7,20 +7,24 @@
 > (gofmt, git, ворота) — сам.
 
 ## База волны
-- `integration` = `db3ec68` (после C0 + C1-lecture + **C1-upload ПОЛНОСТЬЮ** + **C1-sync**). origin
-  синхронен по C0 (2ef594f..0507824), НО C1-lecture/upload/sync ещё НЕ запушены (PR/push — в конце волны).
+- `integration` = `0ce083f` (после C0 + C1-lecture + **C1-upload ПОЛНОСТЬЮ** + **C1-sync** +
+  **C1-devstack** + **C1-hub**). origin синхронен по C0 (2ef594f..0507824) + e750cb7; C1-атомы
+  накапливаются в integration (PR/push в main — в конце волны).
 - Дерево ЧИСТО, ворота ЗЕЛЁНЫЕ (build/vet/test/gofmt + gen-check exit 0), worktree-ов нет. Безопасная граница.
 
-## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-25): C1-upload+C1-sync ЗАВЕРШЕНЫ; остались hub, reader
-ВЫПОЛНЕНО в этой сессии (2026-06-25): достроены последние 2 под-атома C1-upload (mount=cb164fb,
-ui=fdea754+fix 777f04a, merge df35653) И полностью атом C1-sync (1c4dc45+fix 9485c3e, merge 2a96b75).
-README обновлён (db3ec68). integration ЗАПУШЕН в origin (e750cb7, 2026-06-25 по решению владельца).
-ПЕРВОЕ ДЕЙСТВИЕ нового чата (на выбор): **C1-devstack** (быстрый dev-experience атом — см. спеку
-ниже «ЗАПЛАНИРОВАН АТОМ C1-devstack», владелец согласовал; хороший лёгкий старт), затем **C1-hub**
-(меньше) и/или **C1-reader** (самый объёмный — ДРОБИТЬ на под-атомы). hub и reader независимы → ∥.
+## ⏸️ ТОЧКА ВОЗОБНОВЛЕНИЯ (2026-06-26): C1-devstack+C1-hub ЗАВЕРШЕНЫ; остался ТОЛЬКО reader
+ВЫПОЛНЕНО (2026-06-26): атом **C1-devstack** (godotenv + docker-compose + make up/dev, merge ddc0b6d)
+и атом **C1-hub** (витрина `GET /hub` для анонимов: ListPublic + индекс 003 + templ, merge 0ce083f).
+Пофазные коммиты — в таблице state-машины ниже. README + handoff обновлены (этот docs-коммит).
+ОСТАЛСЯ ОДИН атом волны C1: **C1-reader** (читалка «Читальный зал»: structure.json, presigned-пачка
+24ч, рендер — САМЫЙ ОБЪЁМНЫЙ, ДРОБИТЬ на под-атомы). Бэкенд-часть (фазы A/B1/B2) в работе.
+ПЕРВОЕ ДЕЙСТВИЕ нового чата: продолжить **C1-reader** (см. §6 дизайна). С его завершением витрина
+`/hub` получит рабочую ссылку `/lectures/{id}/read` (сейчас 404).
 
-### 📋 ЗАПЛАНИРОВАН АТОМ C1-devstack (dev-experience, согласован владельцем 2026-06-25)
-Цель — запуск в одну команду без ручного `source .env`. Небольшой самодостаточный атом.
+### ✅ ВЫПОЛНЕН АТОМ C1-devstack (dev-experience, merge ddc0b6d, 2026-06-26)
+Цель — запуск в одну команду без ручного `source .env`. Небольшой самодостаточный атом. Спека ниже —
+историческая (реализовано: godotenv в main, `.env.example`, `docker-compose.yml` Postgres16+MinIO+init,
+make `up`/`down`/`dev`, раздел README «Локальный запуск», `.env` в .gitignore).
 Объём (BUILD через Codex по этой спеке):
 1. **godotenv-загрузчик в `cmd/server/main.go`**: ПЕРЕД `config.Load` подгружать `.env` из корня, если
    файл есть (например `github.com/joho/godotenv` → `_ = godotenv.Load()`; молча игнорировать
@@ -81,8 +85,25 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
 | C1-lecture | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ APPROVE | ✅ 2 фикса (security) | ✅ в integration (48f55b3) | ✅ (b452a96) |
 | C1-upload  | ✅ | ✅ | ✅ 7/7 | ✅ COMPLETE | ✅ (2 MAJOR ui) | ✅ guard/htmx фиксы | ✅ в integration (df35653) | ✅ (db3ec68) |
 | C1-sync    | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ (2 MAJOR) | ✅ MaxBytes+статус фиксы | ✅ в integration (2a96b75) | ✅ (db3ec68) |
-| C1-hub     | ⏳ | | | | | | | |
+| C1-devstack| ✅ | ✅ | ✅ | ✅ COMPLETE | — | — | ✅ в integration (ddc0b6d) | ✅ (этот коммит) |
+| C1-hub     | ✅ | ✅ | ✅ | ✅ COMPLETE | ✅ | ✅ | ✅ в integration (0ce083f) | ✅ (этот коммит) |
 | C1-reader  | ⏳ | | | | | | | |
+
+### C1-devstack — пофазные коммиты (merge ddc0b6d)
+| коммит | фаза |
+|---|---|
+| 4a63219 | godotenv-загрузка `.env` в `cmd/server` (молча игнорирует отсутствие файла) |
+| 99988f7 | `docker-compose.yml` (Postgres 16 + MinIO + minio-init создаёт bucket) + `.env.example` |
+| 85c7c3c | Makefile-цели `up`/`down`/`dev` + раздел README «Локальный запуск» |
+
+### C1-hub — пофазные коммиты (merge 0ce083f)
+| коммит | фаза |
+|---|---|
+| c14f5d9 | индекс `idx_lectures_public_published_at` (миграция `003_lectures_hub_index.sql`) |
+| b9a4fc9 | `db.LectureDB.ListPublic` (lectures⋈users, visibility='public' ORDER BY published_at DESC) |
+| 8b15a4d | доменный `hub.Service` + `Repository` (зеркало `internal/lecture`) |
+| 5fe2c37 | страница `/hub` (templ `HubPage`/`HubCard`/`HubEmpty` + handler) |
+| 764d586 | монтаж витрины в `cmd/server` (`hubRepo`-адаптер, `GET /hub` для анонимов) |
 
 ### C1-upload — разбивка на 7 под-атомов (5 смержено, 2 осталось)
 | # | под-атом | что | статус |
@@ -111,6 +132,13 @@ hub и reader друг от друга НЕ зависят — их МОЖНО �
 5. **uploadSignKey рестарт-инвалидация** (как csrfKey): рестарт сервера обнулит незавершённые presign-токены. Приемлемо для беты; стабильный ключ из env — долг.
 6. **README** (~строка 521) упоминает noopCoreTasks как активное ограничение — устарел после wiring. ПОПРАВИТЬ на шаге DOCS C1-upload (отдельный docs-субагент по правилу владельца).
 7. **GATE C1 e2e** (загрузка→ядро→вебхук→ready→чтение) требует C1-sync + C1-reader — за пределами C1-upload.
+
+### Долги C1-hub (НЕ блокеры, на конец атома/волны)
+1. **`/hub` не лендинг `/`** — пока отдельная страница; корень `/` остаётся демо-страницей C0-web.
+   Сделать `/hub` лендингом — отдельное решение/атом.
+2. **Серверной пагинации нет** — выдача ограничена потолком `limit=200` (`hub.defaultLimit`).
+   Курсорная/offset-пагинация — долг при росте каталога.
+3. **Ссылка в читалку `/lectures/{id}/read`** (карточка витрины) ждёт C1-reader — до него 404.
 
 ## C1-lecture — итог атома (смержен 48f55b3, docs b452a96)
 - **data-access `internal/db/lectures.go`**: тип `db.LectureRow`; `LectureDB{Pool}`; методы

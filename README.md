@@ -121,6 +121,10 @@ UUID генерится базой (`gen_random_uuid()`, расширение `p
 Частичный индекс `idx_lectures_core_task_id` на `lectures.core_task_id` (WHERE NOT
 NULL) — обеспечивает быстрый матч входящего вебхука по идентификатору задачи ядра.
 
+Частичный индекс `idx_lectures_public_published_at` на `lectures.published_at DESC`
+(WHERE visibility='public', миграция `003_lectures_hub_index.sql`) — ускоряет выдачу
+публичной витрины `/hub`.
+
 **Data-access лекций (`db.LectureDB`).** Тип `LectureDB` предоставляет операции
 над таблицей `lectures`; не содержит доменной логики (порядок вызовов ядро→БД —
 в пакете `lecture`).
@@ -138,6 +142,7 @@ NULL) — обеспечивает быстрый матч входящего в
 | `Delete` | `(ctx, lectureID, ownerID) (int64, error)` | Hard-delete; вызывается только после `core.DeleteTask` (гарантия домена) |
 | `SetCoreTaskProcessing` | `(ctx, lectureID, ownerID, coreTaskID) (int64, error)` | Переводит failed→processing, обновляет core\_task\_id, очищает error\_code; WHERE status='failed' |
 | `UpdateStatusConditional` | `(ctx, coreTaskID, status, errorCode) (int64, error)` | Анти-гонка: обновляет статус только из processing (WHERE status='processing'); потребитель — C1-sync |
+| `ListPublic` | `(ctx, limit) ([]PublicLectureRow, error)` | Витрина: публичные лекции (lectures⋈users) с автором, WHERE visibility='public', ORDER BY published\_at DESC; потребитель — `hub` |
 
 `UpdateStatusConditional` — единственный метод, который потребляет C1-sync
 (вебхук / поллинг), а не пакет `lecture`; его назначение — атомарно принять
@@ -564,6 +569,44 @@ GET  /lectures/{id}/status   — поллинг-прокси (под RequireAuth
 | `download_error` | Ошибка загрузки |
 | `transcription_error` | Ошибка распознавания речи |
 
+## Пакет `internal/hub`
+
+Доменный модуль публичной витрины: список опубликованных лекций, открытый
+анонимным посетителям. Зеркалит структуру `internal/lecture` (Service + Repository
++ handlers).
+
+**Ключевые типы:**
+
+| Тип | Роль |
+|---|---|
+| `PublicLecture` | Публичная лекция витрины с автором (ID, Title, SourceKind, PublishedAt, AuthorName, AuthorAvatarURL) |
+| `Repository` | Узкий порт БД: `ListPublic(ctx, limit)` — адаптер поверх `db.LectureDB` живёт в `cmd/server` |
+| `Service` | Центральный сервис; хранит repo и потолок выдачи |
+
+**Конструктор:**
+
+```go
+hub.NewService(repo Repository, limit int) *Service
+```
+
+`limit <= 0` заменяется значением по умолчанию (`defaultLimit = 200`).
+
+**HTTP-хендлер (`Service.Mount`):**
+
+```
+GET /hub   — публичная витрина лекций (visibility='public', ORDER BY
+             published_at DESC); ОТКРЫТА анонимам, без RequireAuth
+```
+
+Хендлер рендерит `web.HubPage` (карточки `web.HubCardVM`: автор, тип источника,
+дата публикации, ссылка в читалку `/lectures/{id}/read`).
+
+**Известные ограничения (технический долг):**
+
+- `/hub` пока отдельная страница, а не лендинг `/`.
+- Серверной пагинации нет — выдача ограничена потолком `limit=200`.
+- Ссылка карточки в читалку `/lectures/{id}/read` ждёт атома C1-reader (до него — 404).
+
 ## Точка входа `cmd/server`
 
 Единственный бинарь платформы. Цепочка инициализации:
@@ -591,6 +634,9 @@ config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.Ne
 **`coreStatusAdapter`** — реализует `syncsvc.CoreStatus` поверх
 `*coreclient.CoreClient` (`GetTaskStatus`). Проверяется compile-time.
 
+**`hubRepo`** — реализует `hub.Repository` поверх `db.LectureDB` (`ListPublic`).
+Проверяется compile-time. Витрина `/hub` монтируется вне `RequireAuth`-группы.
+
 Единственный экземпляр `*coreclient.CoreClient` (создаётся через `coreclient.New`)
 и единственный экземпляр `*db.LectureDB` разделяются между всеми адаптерами.
 
@@ -607,6 +653,7 @@ web.NewRouter(
     ),
     web.WithMount(func(r chi.Router) { r.Post("/webhooks/core", syncSvc.HandleWebhook) }),
     web.WithMount(func(r chi.Router) { authSvc.Mount(r) }),
+    web.WithMount(func(r chi.Router) { hubSvc.Mount(r) }), // GET /hub — анонимам
     web.WithMount(func(r chi.Router) {
         r.Group(func(pr chi.Router) {
             pr.Use(authSvc.RequireAuth)
@@ -745,7 +792,17 @@ go generate ./... && go build ./... && go vet ./... && go test ./...
     незавершённые presign-токены (приемлемо для беты).
   - Мягкий экран 502/503 при недоступности ядра — долг (§8).
 
-  Следующие атомы волны C1: **hub** (публичная витрина), **reader** (страница
-  чтения конспекта).
+- **C1-devstack** — dev-experience: локальный запуск в одну команду. godotenv
+  подгружает `.env` в `cmd/server` перед `config.Load`; `.env.example`,
+  `docker-compose.yml` (Postgres 16 + MinIO + minio-init создаёт bucket),
+  Makefile-цели `up`/`down`/`dev`. См. раздел «Локальный запуск».
+
+- **C1-hub** — `internal/hub` + индекс `003` + страница: публичная витрина
+  `GET /hub` (visibility='public' ORDER BY published_at DESC с автором), открыта
+  анонимам. `db.LectureDB.ListPublic` (lectures⋈users), частичный индекс
+  `idx_lectures_public_published_at`. `make gate` зелёный.
+
+  Следующий и последний атом волны C1: **reader** (страница чтения конспекта;
+  до него ссылка карточки витрины `/lectures/{id}/read` отдаёт 404).
 
 Подробности — в `docs/WORKFLOW.md` и `docs/TASKS.md`.
