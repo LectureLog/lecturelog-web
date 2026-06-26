@@ -112,6 +112,22 @@ func TestMigrateIntegration(t *testing.T) {
 		t.Fatal("индекс idx_lectures_core_task_id не найден в pg_indexes")
 	}
 
+	// Проверяем частичный индекс для витрины публичных лекций.
+	err = pool.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM pg_indexes
+			WHERE schemaname = 'public'
+			  AND tablename = 'lectures'
+			  AND indexname = 'idx_lectures_public_published_at'
+		)`,
+	).Scan(&indexExists)
+	if err != nil {
+		t.Fatalf("запрос pg_indexes для хаба: %v", err)
+	}
+	if !indexExists {
+		t.Fatal("индекс idx_lectures_public_published_at не найден в pg_indexes")
+	}
+
 	// Проверяем наличие enum lecture_status
 	var enumExists bool
 	err = pool.QueryRow(ctx,
