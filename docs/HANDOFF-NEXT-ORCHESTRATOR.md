@@ -29,11 +29,16 @@ Claude-приёмщик / docs), читаешь вердикты, ведёшь �
 ворота. Не сваливайся в исполнителя/архитектора — даже мелкий фикс из ревью через сабагента.
 
 СОСТОЯНИЕ: волна C0 ЗАВЕРШЕНА+ОПУБЛИКОВАНА (origin 2ef594f..0507824). Волна C1 ИДЁТ:
-C1-lecture ✅, C1-upload ✅ (7/7), C1-sync ✅, C1-devstack ✅, C1-hub ✅ — все смержены.
-integration=`0ce083f` (push/PR в main — в конце волны). Ворота зелёные (+gen-check), дерево чисто,
-worktree-ов нет. ОСТАЛСЯ в C1 ОДИН атом: reader (ОБЪЁМНЫЙ — дробить). Детали — `docs/HANDOFF-C1.md`.
-NB окружение НЕСТАБИЛЬНО (Go/Node пропадают — переустанавливать); Codex-обёртка детачит/виснет на
-stdin (`codex exec ... </dev/null`) — см. HANDOFF-C1 разделы ОКРУЖЕНИЕ/ГРАБЛЯ Codex.
+C1-lecture ✅, C1-upload ✅ (7/7), C1-sync ✅, C1-devstack ✅, C1-hub ✅, **C1-reader БЭКЕНД (A/B1/B2) ✅**
+— смержены. integration=`3b306c4` (push/PR в main — в конце волны). Ворота зелёные (+gen-check), дерево
+чисто, worktree-ов нет. ОСТАЛОСЬ в C1: reader-UI (под-атом C) + reader-проводка (под-атом D) — спека и
+контракты бэкенда в `docs/HANDOFF-C1.md` (раздел «C1-reader: ОСТАВШИЕСЯ под-атомы C и D»). Затем GATE C1 e2e
+(заблокирован ядром: structure.json пока нет — см. КРИТИЧНЫЙ РИСК reader).
+NB окружение: в этой сессии Go/Node БЫЛИ на месте (не пропадали). Codex: запускать `codex exec ... </dev/null`.
+**НОВАЯ СХЕМА (владелец 2026-06-26):** Codex билдит+КОММИТИТ сам → отдельный агент проверяет → оркестратор
+решает мердж. НО песочница Codex не даёт коммитить (.git read-only) — нужно правило `Bash(codex exec:*)` в
+правах (добавляет ВЛАДЕЛЕЦ) + флаг `--dangerously-bypass-approvals-and-sandbox`. Пока правила нет — Codex
+билдит (sandbox ON), оркестратор коммитит механически. Детали — HANDOFF-C1 раздел «НОВАЯ СХЕМА РОЛЕЙ».
 
 РЕШЕНИЕ ВЛАДЕЛЬЦА (2026-06-24): PR сейчас НЕ создаём — накапливаем в integration до конца
 волны C1, PR в main позже. (Уточняет раннюю формулировку «push + PR в конце C0».)
@@ -42,9 +47,11 @@ stdin (`codex exec ... </dev/null`) — см. HANDOFF-C1 разделы ОКРУ
 грабли Codex/окружения.
 - C1-lecture ✅ (48f55b3), C1-upload ✅ 7/7 (merge df35653), C1-sync ✅ (merge 2a96b75),
   C1-devstack ✅ (merge ddc0b6d), C1-hub ✅ (merge 0ce083f).
-- ОСТАЛОСЬ: **C1-reader** (читалка «Читальный зал»: structure.json, presigned-пачка 24ч,
-  рендер — САМЫЙ ОБЪЁМНЫЙ, ДРОБИТЬ на под-атомы). НЕ запушено (push/PR в main — в конце волны).
-ПЕРВОЕ ДЕЙСТВИЕ: начать дробление **C1-reader** на под-атомы. Детали по §§ дизайна: reader=§6.
+- C1-reader БЭКЕНД ✅ (merge 3b306c4: internal/s3 + internal/reader structure+service).
+- ОСТАЛОСЬ: **C1-reader UI (C)** + **проводка/handlers (D)** + GATE C1 e2e (core-blocked). НЕ запушено.
+ПЕРВОЕ ДЕЙСТВИЕ: под-атом **C** (page_reader.templ + reader.js + tailwind) и **D** (main.go проводка +
+internal/reader/handlers.go + coreclient.GetResultURL + мягкий 502). Контракты бэкенда reader.Service/
+ReaderView — в HANDOFF-C1. Дизайн reader=§6, прототип Конспект.dc.html.
 С завершением reader витрина `/hub` получит рабочую ссылку `/lectures/{id}/read` (сейчас 404).
 NB: ориентир лимита — 5h-окно (НЕ 7d), работать до 5h=95%; Codex = gpt-5.5/medium, сеть в его
 песочнице включена (см. HANDOFF-C1 раздел CODEX).
