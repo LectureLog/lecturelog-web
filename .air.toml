@@ -1,0 +1,15 @@
+# Горячая перезагрузка только Go-кода. templ и CSS обновляйте вручную:
+# make templ / make tailwind.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/server ./cmd/server"
+  bin = "./tmp/server"
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "bin", "vendor", ".git", ".worktrees"]
+  delay = 500
+  stop_on_error = true
+
+[log]
+  time = true
