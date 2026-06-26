@@ -44,6 +44,17 @@ type LectureRow struct {
 	PublishedAt *time.Time
 }
 
+// PublicLectureRow — строка витрины публичных лекций (lectures ⋈ users).
+type PublicLectureRow struct {
+	LectureID       string
+	OwnerID         string
+	Title           string
+	SourceKind      string
+	PublishedAt     time.Time
+	AuthorName      string
+	AuthorAvatarURL string
+}
+
 // LectureDB — объект доступа к таблице lectures на основе пула pgx.
 type LectureDB struct {
 	Pool *pgxpool.Pool
@@ -154,6 +165,46 @@ func (db *LectureDB) ListByOwner(ctx context.Context, ownerID string) ([]Lecture
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("db: ListByOwner rows: %w", err)
+	}
+	return result, nil
+}
+
+// ListPublic возвращает публичные лекции для витрины, ORDER BY published_at DESC.
+// Джойнит users для автора. limit ограничивает выдачу. Пустой срез (не nil) если пусто.
+func (db *LectureDB) ListPublic(ctx context.Context, limit int) ([]PublicLectureRow, error) {
+	const q = `
+        SELECT l.lecture_id, l.owner_id, l.title, l.source_kind::text, l.published_at,
+               COALESCE(u.name, ''), COALESCE(u.avatar_url, '')
+        FROM lectures l
+        JOIN users u ON u.user_id = l.owner_id
+        WHERE l.visibility = 'public' AND l.published_at IS NOT NULL
+        ORDER BY l.published_at DESC
+        LIMIT $1
+    `
+	rows, err := db.Pool.Query(ctx, q, limit)
+	if err != nil {
+		return nil, fmt.Errorf("db: ListPublic: %w", err)
+	}
+	defer rows.Close()
+
+	result := make([]PublicLectureRow, 0)
+	for rows.Next() {
+		row := PublicLectureRow{}
+		if err := rows.Scan(
+			&row.LectureID,
+			&row.OwnerID,
+			&row.Title,
+			&row.SourceKind,
+			&row.PublishedAt,
+			&row.AuthorName,
+			&row.AuthorAvatarURL,
+		); err != nil {
+			return nil, fmt.Errorf("db: ListPublic scan: %w", err)
+		}
+		result = append(result, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("db: ListPublic rows: %w", err)
 	}
 	return result, nil
 }

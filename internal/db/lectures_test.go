@@ -479,3 +479,99 @@ func TestLectureDB_UpdateStatusConditional(t *testing.T) {
 		t.Errorf("Status после no-op = %q, ожидается ready (неизменный)", final.Status)
 	}
 }
+
+// TestLectureDB_ListPublic_SortedByPublishedAtDesc проверяет выборку хаба и порядок публикации.
+func TestLectureDB_ListPublic_SortedByPublishedAtDesc(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	firstAuthor := createTestUser(t, ctx, userDB, "hub-first@example.com")
+	secondAuthor := createTestUser(t, ctx, userDB, "hub-second@example.com")
+	if _, err := lectureDB.Pool.Exec(ctx, `UPDATE users SET name = $1, avatar_url = $2 WHERE user_id = $3`, "Первый автор", "https://example.com/first.png", firstAuthor.UserID); err != nil {
+		t.Fatalf("обновление первого автора: %v", err)
+	}
+	if _, err := lectureDB.Pool.Exec(ctx, `UPDATE users SET name = $1, avatar_url = $2 WHERE user_id = $3`, "Второй автор", "https://example.com/second.png", secondAuthor.UserID); err != nil {
+		t.Fatalf("обновление второго автора: %v", err)
+	}
+
+	older := createTestLecture(t, ctx, lectureDB, firstAuthor.UserID, "Ранняя публичная", "audio")
+	newer := createTestLecture(t, ctx, lectureDB, secondAuthor.UserID, "Поздняя публичная", "video")
+	private := createTestLecture(t, ctx, lectureDB, firstAuthor.UserID, "Личная лекция", "audio")
+	setReadyStatus(t, ctx, lectureDB.Pool, older.LectureID)
+	setReadyStatus(t, ctx, lectureDB.Pool, newer.LectureID)
+	setReadyStatus(t, ctx, lectureDB.Pool, private.LectureID)
+
+	if _, err := lectureDB.SetVisibility(ctx, older.LectureID, firstAuthor.UserID, "public"); err != nil {
+		t.Fatalf("публикация ранней лекции: %v", err)
+	}
+	time.Sleep(10 * time.Millisecond)
+	if _, err := lectureDB.SetVisibility(ctx, newer.LectureID, secondAuthor.UserID, "public"); err != nil {
+		t.Fatalf("публикация поздней лекции: %v", err)
+	}
+
+	rows, err := lectureDB.ListPublic(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPublic: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("ListPublic: len = %d, ожидается 2", len(rows))
+	}
+	if rows[0].LectureID != newer.LectureID || rows[1].LectureID != older.LectureID {
+		t.Errorf("порядок ListPublic = [%q, %q], ожидается [%q, %q]", rows[0].LectureID, rows[1].LectureID, newer.LectureID, older.LectureID)
+	}
+	if rows[0].AuthorName != "Второй автор" || rows[0].AuthorAvatarURL != "https://example.com/second.png" {
+		t.Errorf("автор поздней лекции = %+v, ожидаются данные второго автора", rows[0])
+	}
+}
+
+// TestLectureDB_ListPublic_ExcludesPrivate проверяет, что личные лекции не попадают в хаб.
+func TestLectureDB_ListPublic_ExcludesPrivate(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+	user := createTestUser(t, ctx, userDB, "hub-private@example.com")
+	private := createTestLecture(t, ctx, lectureDB, user.UserID, "Личная", "audio")
+	setReadyStatus(t, ctx, lectureDB.Pool, private.LectureID)
+
+	rows, err := lectureDB.ListPublic(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPublic: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("ListPublic: len = %d, ожидается 0", len(rows))
+	}
+}
+
+// TestLectureDB_ListPublic_Empty проверяет пустой, но не nil срез.
+func TestLectureDB_ListPublic_Empty(t *testing.T) {
+	ctx, _, lectureDB := setupLectureTestDB(t)
+
+	rows, err := lectureDB.ListPublic(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPublic: %v", err)
+	}
+	if rows == nil {
+		t.Error("ListPublic должен вернуть пустой срез, не nil")
+	}
+	if len(rows) != 0 {
+		t.Errorf("ListPublic: len = %d, ожидается 0", len(rows))
+	}
+}
+
+// TestLectureDB_ListPublic_RespectsLimit проверяет ограничение выдачи.
+func TestLectureDB_ListPublic_RespectsLimit(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+	user := createTestUser(t, ctx, userDB, "hub-limit@example.com")
+	for i := 0; i < 2; i++ {
+		lecture := createTestLecture(t, ctx, lectureDB, user.UserID, "Публичная", "audio")
+		setReadyStatus(t, ctx, lectureDB.Pool, lecture.LectureID)
+		if _, err := lectureDB.SetVisibility(ctx, lecture.LectureID, user.UserID, "public"); err != nil {
+			t.Fatalf("публикация лекции: %v", err)
+		}
+	}
+
+	rows, err := lectureDB.ListPublic(ctx, 1)
+	if err != nil {
+		t.Fatalf("ListPublic: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Errorf("ListPublic limit: len = %d, ожидается 1", len(rows))
+	}
+}
