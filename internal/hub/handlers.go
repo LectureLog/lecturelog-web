@@ -50,9 +50,9 @@ func hubToVM(lecture PublicLecture) web.HubCardVM {
 	}
 }
 
-// readURL задаёт единую точку стыка с будущей читалкой.
+// readURL задаёт путь к читалке.
 func readURL(id string) string {
-	return "/lectures/" + id + "/read"
+	return "/read/" + id
 }
 
 // formatDate форматирует дату публикации для метаданных с tabular-nums.
