@@ -1,7 +1,7 @@
 # Makefile платформы LectureLog (web).
 # Цели обёрнуты вокруг стандартного go-тулчейна и генерации coreclient из спеки ядра.
 
-.PHONY: generate build vet test gate sync-spec migrate-test templ tailwind-bin tailwind web-gen gen-check
+.PHONY: generate build vet test gate sync-spec migrate-test templ tailwind-bin tailwind web-gen gen-check up down dev
 
 # ─── Toolchain web-слоя ────────────────────────────────────────────────────────
 
@@ -48,6 +48,18 @@ gen-check: web-gen
 	git diff --exit-code -- internal/web/
 
 # ─── Стандартные цели ──────────────────────────────────────────────────────────
+
+# Поднять локальные Postgres и MinIO для платформы.
+up:
+	docker compose up -d
+
+# Остановить локальные сервисы платформы.
+down:
+	docker compose down
+
+# Запустить сервер; .env подгружается точкой входа автоматически.
+dev: up
+	go run ./cmd/server
 
 # Генерация coreclient: нормализация спеки (3.1.0 -> 3.0-nullable) + oapi-codegen.
 # Сам процесс описан в //go:generate директивах internal/coreclient/generate.go.

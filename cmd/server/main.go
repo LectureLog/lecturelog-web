@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/gorilla/csrf"
+	"github.com/joho/godotenv"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 
@@ -118,6 +119,9 @@ func (a *dbAdapter) DeleteSession(ctx context.Context, sessionID string) error {
 
 func main() {
 	ctx := context.Background()
+
+	// Подгружаем локальный .env, если он есть; переменные окружения ОС имеют приоритет.
+	_ = godotenv.Load()
 
 	// Загружаем конфигурацию из переменных окружения
 	cfg, err := config.Load(os.Getenv)
