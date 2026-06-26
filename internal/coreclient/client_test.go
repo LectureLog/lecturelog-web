@@ -270,6 +270,19 @@ func TestGetResultURL(t *testing.T) {
 	}
 }
 
+func TestGetResultURL_EmptyURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	url, err := newTestClient(t, srv.URL).GetResultURL(context.Background(), "task-123", "")
+	if !errors.Is(err, ErrResultURLEmpty) {
+		t.Fatalf("ожидался ErrResultURLEmpty, получили url=%q err=%v", url, err)
+	}
+}
+
 func TestGetResultURL_NotFound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.RawQuery != "" {

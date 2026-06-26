@@ -50,6 +50,18 @@ func (e handlerExport) GetResultURL(context.Context, string, string) (string, er
 	return e.url, e.err
 }
 
+// forbiddenExport фиксирует ошибочный вызов провайдера при запрещённом доступе.
+type forbiddenExport struct {
+	t     *testing.T
+	calls int
+}
+
+func (e *forbiddenExport) GetResultURL(context.Context, string, string) (string, error) {
+	e.calls++
+	e.t.Error("GetResultURL вызван при запрещённом доступе")
+	return "", errors.New("вызов провайдера не должен происходить")
+}
+
 type handlerAuthRepo struct{}
 
 func (handlerAuthRepo) FindUserByEmail(context.Context, string) (*auth.User, error) { return nil, nil }
@@ -154,5 +166,25 @@ func TestHandlersExport(t *testing.T) {
 			t.Fatalf("GET unavailable export = %d, want 502", rec.Code)
 		}
 		assertSoftError(t, rec.Body.String())
+	})
+	t.Run("private anonymous is hidden before provider", func(t *testing.T) {
+		export := &forbiddenExport{t: t}
+		rec := requestReader(newReaderHandler(t, readerLecture("ready", "private"), nil, export), "/read/lecture/export", false)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET private /read/lecture/export = %d, want 404", rec.Code)
+		}
+		if export.calls != 0 {
+			t.Fatalf("GetResultURL вызван %d раз", export.calls)
+		}
+	})
+	t.Run("processing anonymous is hidden before provider", func(t *testing.T) {
+		export := &forbiddenExport{t: t}
+		rec := requestReader(newReaderHandler(t, readerLecture("processing", "private"), nil, export), "/read/lecture/export", false)
+		if rec.Code != http.StatusNotFound {
+			t.Fatalf("GET processing /read/lecture/export = %d, want 404", rec.Code)
+		}
+		if export.calls != 0 {
+			t.Fatalf("GetResultURL вызван %d раз", export.calls)
+		}
 	})
 }

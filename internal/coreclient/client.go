@@ -12,6 +12,9 @@ import (
 // ErrTaskNotFound возвращается, когда ядро отвечает 404 на запрос статуса задачи.
 var ErrTaskNotFound = errors.New("coreclient: задача не найдена")
 
+// ErrResultURLEmpty возвращается, когда ядро вернуло успешный ответ без ссылки на результат.
+var ErrResultURLEmpty = errors.New("coreclient: ядро вернуло пустую ссылку результата")
+
 // UploadResult — доменный результат presigned-PUT (POST /uploads).
 type UploadResult struct {
 	Key       string // ключ объекта в S3 (начинается с uploads/)
@@ -154,6 +157,9 @@ func (c *CoreClient) GetResultURL(ctx context.Context, taskID, filename string) 
 		return "", fmt.Errorf("coreclient: запрос ссылки результата: %w", err)
 	}
 	if resp.JSON200 != nil {
+		if resp.JSON200.Url == "" {
+			return "", ErrResultURLEmpty
+		}
 		return resp.JSON200.Url, nil
 	}
 	if resp.StatusCode() == 404 {
