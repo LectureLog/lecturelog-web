@@ -6,7 +6,7 @@ services:
     env_file: .env
     environment:
       # Внутри сети Compose localhost не указывает на Postgres.
-      PLATFORM_DB_DSN: postgres://lecturelog:lecturelog@postgres:5432/lecturelog?sslmode=disable
+      PLATFORM_DB_DSN: postgres://lecturelog:${WEB_POSTGRES_PASSWORD:?WEB_POSTGRES_PASSWORD is required}@postgres:5432/lecturelog?sslmode=disable
     ports:
       - "8080:8080"
     depends_on:
@@ -20,7 +20,7 @@ services:
     image: postgres:16
     environment:
       POSTGRES_USER: lecturelog
-      POSTGRES_PASSWORD: lecturelog
+      POSTGRES_PASSWORD: ${WEB_POSTGRES_PASSWORD:?WEB_POSTGRES_PASSWORD is required}
       POSTGRES_DB: lecturelog
     ports:
       - "5432:5432"

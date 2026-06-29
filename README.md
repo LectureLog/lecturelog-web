@@ -18,7 +18,8 @@ OpenAPI-контракта ядра.
 
 ```bash
 cp .env.example .env
-# Заполните GOOGLE_CLIENT_ID и GOOGLE_CLIENT_SECRET из Google Cloud Console.
+# Заполните GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, WEB_POSTGRES_PASSWORD,
+# PLATFORM_DB_DSN, LECTURELOG_WEBHOOK_SECRET и CORE_MINIO_*.
 make up-stub
 make watch
 ```

@@ -6,7 +6,7 @@ services:
     env_file:
       - .env
     environment:
-      PLATFORM_DB_DSN: postgres://lecturelog:${WEB_POSTGRES_PASSWORD:-lecturelog}@lecturelog-web-postgres:5432/lecturelog?sslmode=disable
+      PLATFORM_DB_DSN: postgres://lecturelog:${WEB_POSTGRES_PASSWORD:?WEB_POSTGRES_PASSWORD is required}@lecturelog-web-postgres:5432/lecturelog?sslmode=disable
       CORE_API_BASE_URL: http://lecturelog-core-api:8000
     ports:
       - 127.0.0.1:${WEB_HTTP_PORT:-8080}:8080
@@ -30,7 +30,7 @@ services:
     hostname: lecturelog-web-postgres
     environment:
       POSTGRES_USER: lecturelog
-      POSTGRES_PASSWORD: ${WEB_POSTGRES_PASSWORD:-lecturelog}
+      POSTGRES_PASSWORD: ${WEB_POSTGRES_PASSWORD:?WEB_POSTGRES_PASSWORD is required}
       POSTGRES_DB: lecturelog
     volumes:
       - lecturelog-web-postgres-data:/var/lib/postgresql/data
