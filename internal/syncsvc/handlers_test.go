@@ -279,6 +279,9 @@ func TestHandlePollStatus_ProcessingCardHasPollingTrigger(t *testing.T) {
 	if !strings.Contains(body, "document.visibilityState") {
 		t.Fatalf("hx-trigger должен ограничиваться видимой вкладкой: %s", body)
 	}
+	if !strings.Contains(body, "outerHTML") {
+		t.Fatalf("processing-карточка должна свапаться через outerHTML для self-replacement: %s", body)
+	}
 }
 
 func TestHandlePollStatus_TerminalCardHasNoPollingTrigger(t *testing.T) {
