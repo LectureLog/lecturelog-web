@@ -1,5 +1,7 @@
 package web
 
+import "fmt"
+
 // LectureCardVM — view-модель одной карточки лекции для шаблонов.
 // Маппинг lecture.Lecture → LectureCardVM выполняет lecture/handlers.go.
 type LectureCardVM struct {
@@ -21,6 +23,11 @@ type LectureCardVM struct {
 	CanRetry bool
 	// ErrorText — текст ошибки (маппинг error_code в сообщение).
 	ErrorText string
+	// ProgressPct — процент выполнения (0..100), показывается при processing.
+	ProgressPct int
+	// StageLabel — локализованная метка стадии обработки («Распознавание речи» и т.п.).
+	// Пусто/неизвестно → "Обработка" (см. stageText).
+	StageLabel string
 	// UpdatedAt — отформатированная дата обновления для tabular-nums.
 	UpdatedAt string
 }
@@ -75,10 +82,7 @@ templ LectureCard(vm LectureCardVM) {
 		</div>
 		<div class="ll-lec-card-body">
 			@LectureTitleInline(vm)
-			<div class={ "ll-status ll-status--" + vm.Status }>{ vm.StatusLabel }</div>
-			if vm.ErrorText != "" {
-				<p class="ll-lec-error">{ vm.ErrorText }</p>
-			}
+			@LectureProgress(vm)
 		</div>
 		<div class="ll-lec-card-footer">
 			<span class="ll-lec-meta">{ vm.UpdatedAt }</span>
@@ -87,6 +91,26 @@ templ LectureCard(vm LectureCardVM) {
 			}
 		</div>
 	</article>
+}
+
+// LectureProgress — блок статуса/прогресса карточки.
+// Выделен в отдельный фрагмент с id, чтобы htmx-polling точечно обновлял
+// ТОЛЬКО его (hx-target=#lec-progress-{id}), не пересоздавая <article>:
+// пульсация не дёргается, фокус не теряется, бар плавно едет (CSS transition).
+templ LectureProgress(vm LectureCardVM) {
+	<div class="ll-lec-progress" id={ "lec-progress-" + vm.ID }>
+		if vm.Status == "processing" {
+			<div class="ll-status ll-status--processing">
+				{ stageText(vm) } · { fmt.Sprintf("%d%%", vm.ProgressPct) }
+			</div>
+			<div class="ll-lec-bar"><i style={ progressWidth(vm.ProgressPct) }></i></div>
+		} else {
+			<div class={ "ll-status ll-status--" + vm.Status }>{ vm.StatusLabel }</div>
+			if vm.ErrorText != "" {
+				<p class="ll-lec-error">{ vm.ErrorText }</p>
+			}
+		}
+	</div>
 }
 
 // LectureTitleInline — inline-форма переименования заголовка лекции.
@@ -156,8 +180,59 @@ func pollAttrs(vm LectureCardVM) templ.Attributes {
 	return templ.Attributes{
 		"hx-get":     "/lectures/" + vm.ID + "/status",
 		"hx-trigger": "every 10s [document.visibilityState==='visible'], visibilitychange[document.visibilityState==='visible'] from:document",
+		"hx-target":  "#lec-progress-" + vm.ID,
 		"hx-swap":    "outerHTML",
 	}
+}
+
+// stageLabel переводит машинную стадию ядра в русскую метку.
+// Источник значений — enum PipelineStage ядра. Неизвестное/пустое → «Обработка».
+func stageLabel(stage string) string {
+	switch stage {
+	case "video_ingest":
+		return "Загрузка видео"
+	case "audio_extract":
+		return "Извлечение аудио"
+	case "transcribe":
+		return "Распознавание речи"
+	case "slides", "video_slides":
+		return "Извлечение слайдов"
+	case "structurize":
+		return "Структурирование конспекта"
+	case "audio_cut", "video_cut":
+		return "Нарезка фрагментов"
+	case "export":
+		return "Формирование результата"
+	default:
+		return "Обработка"
+	}
+}
+
+// StageLabelFor — экспортируемая обёртка над stageLabel: единая точка маппинга
+// стадии ядра в русскую метку (DRY), вызывается из syncsvc.lectureToVM.
+func StageLabelFor(stage string) string {
+	return stageLabel(stage)
+}
+
+// stageText возвращает метку стадии для отображения в карточке.
+// Если StageLabel пуст (карточка из БД до первого поллинга) — «Обработка»,
+// чтобы не было «· 0%» с пустой меткой перед разделителем.
+func stageText(vm LectureCardVM) string {
+	if vm.StageLabel == "" {
+		return "Обработка"
+	}
+	return vm.StageLabel
+}
+
+// progressWidth возвращает inline-style ширины бара, клампя процент в 0..100.
+func progressWidth(pct int) string {
+	if pct < 0 {
+		pct = 0
+	}
+	if pct > 100 {
+		pct = 100
+	}
+	return fmt.Sprintf("width:%d%%", pct)
 }
 
 // sourceBadgeClass возвращает CSS-класс бейджа источника.

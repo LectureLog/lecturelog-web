@@ -301,6 +301,22 @@ func TestHandlePollStatus_TerminalCardHasNoPollingTrigger(t *testing.T) {
 	}
 }
 
+func TestHandlePollStatus_ProcessingShowsStageAndPercent(t *testing.T) {
+	repo := &mockRepo{lecture: testLecture("lec-1", "owner", "processing")}
+	core := &mockCore{progress: &TaskProgress{Status: "processing", Stage: "transcribe", ProgressPct: 42}}
+	svc := NewService(repo, core, "secret")
+
+	rec := performPoll(svc, "lec-1", "owner")
+
+	body := rec.Body.String()
+	if !strings.Contains(body, "Распознавание речи") {
+		t.Fatalf("карточка должна показывать метку стадии transcribe: %s", body)
+	}
+	if !strings.Contains(body, "42") {
+		t.Fatalf("карточка должна показывать процент 42: %s", body)
+	}
+}
+
 func performWebhook(svc *Service, body []byte, signature string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/core", bytes.NewReader(body))
 	if signature != "" {

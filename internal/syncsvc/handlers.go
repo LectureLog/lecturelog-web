@@ -135,6 +135,8 @@ func mergeProgress(lec LectureView, progress TaskProgress) LectureView {
 	if progress.ErrorCode != "" {
 		lec.ErrorCode = progress.ErrorCode
 	}
+	lec.ProgressPct = progress.ProgressPct
+	lec.Stage = progress.Stage
 	return lec
 }
 
@@ -162,6 +164,8 @@ func lectureToVM(lec LectureView) web.LectureCardVM {
 		CanPublish:  lec.Status == "ready",
 		CanRetry:    lec.Status == "failed",
 		ErrorText:   mapErrorCode(lec.ErrorCode),
+		ProgressPct: lec.ProgressPct,
+		StageLabel:  web.StageLabelFor(lec.Stage),
 		UpdatedAt:   formatDate(lec.UpdatedAt),
 	}
 }

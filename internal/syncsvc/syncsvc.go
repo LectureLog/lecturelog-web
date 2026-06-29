@@ -36,6 +36,10 @@ type LectureView struct {
 	CoreTaskID string
 	Status     string
 	ErrorCode  string
+	// ProgressPct — процент выполнения текущей задачи (0..100); только для processing из ядра.
+	ProgressPct int
+	// Stage — машинная стадия конвейера ядра (transcribe/structurize/...); "" если неизвестна.
+	Stage      string
 	Title      string
 	SourceKind string
 	Visibility string

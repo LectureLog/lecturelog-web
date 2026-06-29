@@ -212,6 +212,10 @@ func lectureToVM(lec Lecture) web.LectureCardVM {
 		CanPublish:  lec.Status == StatusReady,
 		CanRetry:    lec.Status == StatusFailed && (lec.S3Key != "" || lec.VideoURL != ""),
 		ErrorText:   mapErrorCode(lec.ErrorCode),
+		// Карточка из БД прогресса не знает: для processing покажет «Обработка · 0%»
+		// с пустым баром до первого поллинга — это приемлемо.
+		ProgressPct: 0,
+		StageLabel:  "",
 		UpdatedAt:   formatDate(lec.UpdatedAt),
 	}
 }

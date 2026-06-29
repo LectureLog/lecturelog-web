@@ -399,6 +399,24 @@
     color: var(--text-3);
   }
 
+  /* Прогресс-бар обработки в карточке (паттерн .ll-upload-file-bar).
+     transition: width даёт плавный доезд бара при точечном htmx-свапе. */
+  .ll-lec-bar {
+    height: 4px;
+    margin-top: 6px;
+    border-radius: var(--r-track);
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .ll-lec-bar > i {
+    display: block;
+    height: 100%;
+    background: var(--accent);
+    transition: width .3s ease;
+  }
+
   /* Текст ошибки */
   .ll-lec-error {
     font-family: var(--font-sans);
