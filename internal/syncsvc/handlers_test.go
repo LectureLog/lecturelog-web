@@ -260,6 +260,44 @@ func TestHandlePollStatus_CoreErrorFallsBackToDBCard(t *testing.T) {
 	}
 }
 
+func TestHandlePollStatus_ProcessingCardHasPollingTrigger(t *testing.T) {
+	repo := &mockRepo{lecture: testLecture("lec-1", "owner", "processing")}
+	// ядро всё ещё обрабатывает → карточка остаётся processing
+	core := &mockCore{progress: &TaskProgress{Status: "processing", ProgressPct: 10}}
+	svc := NewService(repo, core, "secret")
+
+	rec := performPoll(svc, "lec-1", "owner")
+
+	body := rec.Body.String()
+	if !strings.Contains(body, `hx-trigger`) {
+		t.Fatalf("processing-карточка должна содержать hx-trigger для self-polling: %s", body)
+	}
+	if !strings.Contains(body, "/lectures/lec-1/status") {
+		t.Fatalf("processing-карточка должна опрашивать /lectures/lec-1/status: %s", body)
+	}
+	// поллинг только при видимой вкладке — не долбим ядро в фоне
+	if !strings.Contains(body, "document.visibilityState") {
+		t.Fatalf("hx-trigger должен ограничиваться видимой вкладкой: %s", body)
+	}
+}
+
+func TestHandlePollStatus_TerminalCardHasNoPollingTrigger(t *testing.T) {
+	cases := []string{"ready", "failed"}
+	for _, status := range cases {
+		t.Run(status, func(t *testing.T) {
+			repo := &mockRepo{lecture: testLecture("lec-1", "owner", status)}
+			svc := NewService(repo, &mockCore{}, "secret")
+
+			rec := performPoll(svc, "lec-1", "owner")
+
+			body := rec.Body.String()
+			if strings.Contains(body, "hx-trigger") {
+				t.Fatalf("терминальная карточка (%s) НЕ должна содержать hx-trigger (поллинг обязан остановиться): %s", status, body)
+			}
+		})
+	}
+}
+
 func performWebhook(svc *Service, body []byte, signature string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(http.MethodPost, "/webhooks/core", bytes.NewReader(body))
 	if signature != "" {
