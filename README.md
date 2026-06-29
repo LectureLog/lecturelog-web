@@ -33,7 +33,7 @@ make watch
 только Postgres. Укажите адрес ядра в `CORE_API_BASE_URL` без `/api/v1` и его
 MinIO в `CORE_MINIO_*`. После запуска откройте http://localhost:8080.
 
-### Прод: одной командой
+### Прод: локальная сборка из исходников
 
 Заполните `.env`: задайте Google OAuth, общий с ядром
 `LECTURELOG_WEBHOOK_SECRET` и значения `CORE_*` реального ядра. Затем выполните:
@@ -59,6 +59,64 @@ web и внешний адрес для браузера могут конфли
 
 Миграции БД применяются автоматически при старте сервера через `db.Migrate`,
 отдельная команда не нужна.
+
+### VPS: готовый образ из GHCR
+
+Основной prod-like сценарий для быстрой проверки — готовый Docker image из GHCR,
+без сборки исходников на сервере. Каналы образов:
+
+| Docker tag | Откуда берётся | Назначение |
+|---|---|---|
+| `dev` | каждый push в git-ветку `dev` | быстрый прод-чек текущей разработки |
+| `latest` | git tag `v*` | стабильный релиз |
+| `vX.Y.Z` | git tag `vX.Y.Z` | воспроизводимый релиз |
+
+`latest` — это Docker-тег, не git-ветка. Стабильный код живёт в `main`, активная
+разработка — в `dev`.
+
+Минимальное развёртывание web на VPS:
+
+```bash
+mkdir -p /opt/lecturelog-web
+cd /opt/lecturelog-web
+curl -fsSLo docker-compose.yml https://raw.githubusercontent.com/LectureLog/lecturelog-web/refs/heads/dev/deploy/compose.vps.yml
+curl -fsSLo .env https://raw.githubusercontent.com/LectureLog/lecturelog-web/refs/heads/dev/deploy/env.web.example
+docker network create lecturelog-shared || true
+```
+
+Отредактируйте `.env`: задайте Google OAuth, `WEB_POSTGRES_PASSWORD`, общий с
+core `LECTURELOG_WEBHOOK_SECRET` и публичный HTTPS endpoint MinIO ядра в
+`CORE_MINIO_ENDPOINT` без схемы, например `files.example.com`. Затем:
+
+```bash
+docker compose pull
+docker compose up -d
+docker compose logs -f web
+```
+
+Для dev-проверки оставьте `LECTURELOG_WEB_IMAGE_TAG=dev`. Для стабильного канала
+используйте `latest`, для воспроизводимого деплоя — конкретный тег, например
+`v0.2.0`.
+
+Core должен быть поднят в общей Docker-сети `lecturelog-shared`: web обращается к
+нему по `http://lecturelog-core-api:8000`. Наружу web-порт публикуется только на
+`127.0.0.1`, поэтому публичный HTTPS-доступ должен идти через nginx/caddy.
+
+### Выпуск релиза
+
+1. Проверьте, что `dev` зелёный и его образ `:dev` проверен на VPS.
+2. Перенесите проверенный код в `main`.
+3. Поставьте semver-тег и отправьте его в GitHub:
+
+```bash
+git checkout main
+git merge --ff-only dev
+git tag v0.2.0
+git push origin main v0.2.0
+```
+
+GitHub Actions соберёт `ghcr.io/lecturelog/lecturelog-web:v0.2.0`,
+обновит `ghcr.io/lecturelog/lecturelog-web:latest` и создаст GitHub Release.
 
 ## Архитектура контракта
 

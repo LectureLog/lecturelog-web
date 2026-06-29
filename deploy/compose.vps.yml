@@ -1,0 +1,55 @@
+services:
+  web:
+    image: ghcr.io/lecturelog/lecturelog-web:${LECTURELOG_WEB_IMAGE_TAG:-dev}
+    container_name: lecturelog-web
+    hostname: lecturelog-web
+    env_file:
+      - .env
+    environment:
+      PLATFORM_DB_DSN: postgres://lecturelog:${WEB_POSTGRES_PASSWORD:-lecturelog}@lecturelog-web-postgres:5432/lecturelog?sslmode=disable
+      CORE_API_BASE_URL: http://lecturelog-core-api:8000
+    ports:
+      - 127.0.0.1:${WEB_HTTP_PORT:-8080}:8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/hub >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - lecturelog-web-internal
+      - lecturelog-shared
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: lecturelog-web-postgres
+    hostname: lecturelog-web-postgres
+    environment:
+      POSTGRES_USER: lecturelog
+      POSTGRES_PASSWORD: ${WEB_POSTGRES_PASSWORD:-lecturelog}
+      POSTGRES_DB: lecturelog
+    volumes:
+      - lecturelog-web-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lecturelog -d lecturelog"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - lecturelog-web-internal
+
+networks:
+  lecturelog-web-internal:
+    name: lecturelog-web-internal
+  lecturelog-shared:
+    name: lecturelog-shared
+    external: true
+
+volumes:
+  lecturelog-web-postgres-data:
+    name: lecturelog-web-postgres-data
