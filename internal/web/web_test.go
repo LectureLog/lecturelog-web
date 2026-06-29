@@ -448,6 +448,120 @@ func TestLectureCard_Status(t *testing.T) {
 	}
 }
 
+// TestLectureCard_ProcessingHasPollingTrigger проверяет, что полный рендер
+// processing-карточки несёт htmx-атрибуты self-polling-а на <article>.
+// Поллинг таргетит фрагмент прогресса (#lec-progress-{id}); сам поллинг-ответ
+// при processing — фрагмент БЕЗ триггера (это покрыто тестами syncsvc).
+func TestLectureCard_ProcessingHasPollingTrigger(t *testing.T) {
+	vm := web.LectureCardVM{
+		ID:          "lec-1",
+		Title:       "Физика квантовая",
+		Status:      "processing",
+		StatusLabel: "Обработка",
+		Visibility:  "private",
+		SourceKind:  "video",
+		ProgressPct: 10,
+		StageLabel:  "Распознавание речи",
+		UpdatedAt:   "24 июн. 2026",
+	}
+	html := renderLectureCard(t, vm)
+
+	if !strings.Contains(html, "hx-trigger") {
+		t.Errorf("processing-карточка должна нести hx-trigger для self-polling: %s", html)
+	}
+	if !strings.Contains(html, "/lectures/lec-1/status") {
+		t.Errorf("processing-карточка должна опрашивать /lectures/lec-1/status: %s", html)
+	}
+	// поллинг только при видимой вкладке — не долбим ядро в фоне
+	if !strings.Contains(html, "document.visibilityState") {
+		t.Errorf("hx-trigger должен ограничиваться видимой вкладкой: %s", html)
+	}
+	// цель поллинга — фрагмент прогресса, а не вся карточка
+	if !strings.Contains(html, `hx-target="#lec-progress-lec-1"`) {
+		t.Errorf("поллинг должен таргетить фрагмент прогресса #lec-progress-lec-1: %s", html)
+	}
+	if !strings.Contains(html, "outerHTML") {
+		t.Errorf("поллинг должен свапаться через outerHTML: %s", html)
+	}
+}
+
+// TestLectureCard_TerminalHasNoPollingTrigger проверяет, что терминальная карточка
+// не несёт hx-trigger (поллинг обязан остановиться).
+func TestLectureCard_TerminalHasNoPollingTrigger(t *testing.T) {
+	for _, status := range []string{"ready", "failed"} {
+		t.Run(status, func(t *testing.T) {
+			vm := web.LectureCardVM{
+				ID:          "lec-1",
+				Title:       "Лекция",
+				Status:      status,
+				StatusLabel: status,
+				Visibility:  "private",
+				SourceKind:  "audio",
+				UpdatedAt:   "24 июн. 2026",
+			}
+			html := renderLectureCard(t, vm)
+			if strings.Contains(html, "hx-trigger") {
+				t.Errorf("терминальная карточка (%s) НЕ должна нести hx-trigger: %s", status, html)
+			}
+		})
+	}
+}
+
+// TestLectureProgress_ProcessingFragment проверяет фрагмент прогресса при processing:
+// метка стадии, процент и плавный бар, без атрибутов поллинга.
+func TestLectureProgress_ProcessingFragment(t *testing.T) {
+	vm := web.LectureCardVM{
+		ID:          "lec-1",
+		Status:      "processing",
+		StatusLabel: "Обработка",
+		ProgressPct: 42,
+		StageLabel:  "Распознавание речи",
+	}
+	var b bytes.Buffer
+	if err := web.LectureProgress(vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("LectureProgress.Render: %v", err)
+	}
+	html := b.String()
+
+	if !strings.Contains(html, `id="lec-progress-lec-1"`) {
+		t.Errorf("фрагмент должен иметь id=lec-progress-lec-1: %s", html)
+	}
+	if !strings.Contains(html, "Распознавание речи") {
+		t.Errorf("фрагмент должен показывать метку стадии: %s", html)
+	}
+	if !strings.Contains(html, "42%") {
+		t.Errorf("фрагмент должен показывать процент 42%%: %s", html)
+	}
+	if !strings.Contains(html, "ll-lec-bar") {
+		t.Errorf("фрагмент должен содержать прогресс-бар ll-lec-bar: %s", html)
+	}
+	// фрагмент сам по себе не триггерит поллинг (триггер живёт на <article>)
+	if strings.Contains(html, "hx-trigger") {
+		t.Errorf("фрагмент прогресса не должен нести hx-trigger: %s", html)
+	}
+}
+
+// TestLectureProgress_EmptyStageFallsBackToObrabotka проверяет, что при пустом
+// StageLabel (карточка из БД до первого поллинга) показывается «Обработка»,
+// а не пустая метка перед «· 0%».
+func TestLectureProgress_EmptyStageFallsBackToObrabotka(t *testing.T) {
+	vm := web.LectureCardVM{
+		ID:          "lec-1",
+		Status:      "processing",
+		StatusLabel: "Обработка",
+		ProgressPct: 0,
+		StageLabel:  "",
+	}
+	var b bytes.Buffer
+	if err := web.LectureProgress(vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("LectureProgress.Render: %v", err)
+	}
+	html := b.String()
+	if !strings.Contains(html, "Обработка · 0%") {
+		t.Errorf("при пустом StageLabel ожидается «Обработка · 0%%»: %s", html)
+	}
+}
+
 // TestLectureCard_Failed проверяет наличие кнопки retry для failed-лекции.
 func TestLectureCard_Failed(t *testing.T) {
 	vm := web.LectureCardVM{

@@ -260,30 +260,6 @@ func TestHandlePollStatus_CoreErrorFallsBackToDBCard(t *testing.T) {
 	}
 }
 
-func TestHandlePollStatus_ProcessingCardHasPollingTrigger(t *testing.T) {
-	repo := &mockRepo{lecture: testLecture("lec-1", "owner", "processing")}
-	// ядро всё ещё обрабатывает → карточка остаётся processing
-	core := &mockCore{progress: &TaskProgress{Status: "processing", ProgressPct: 10}}
-	svc := NewService(repo, core, "secret")
-
-	rec := performPoll(svc, "lec-1", "owner")
-
-	body := rec.Body.String()
-	if !strings.Contains(body, `hx-trigger`) {
-		t.Fatalf("processing-карточка должна содержать hx-trigger для self-polling: %s", body)
-	}
-	if !strings.Contains(body, "/lectures/lec-1/status") {
-		t.Fatalf("processing-карточка должна опрашивать /lectures/lec-1/status: %s", body)
-	}
-	// поллинг только при видимой вкладке — не долбим ядро в фоне
-	if !strings.Contains(body, "document.visibilityState") {
-		t.Fatalf("hx-trigger должен ограничиваться видимой вкладкой: %s", body)
-	}
-	if !strings.Contains(body, "outerHTML") {
-		t.Fatalf("processing-карточка должна свапаться через outerHTML для self-replacement: %s", body)
-	}
-}
-
 func TestHandlePollStatus_TerminalCardHasNoPollingTrigger(t *testing.T) {
 	cases := []string{"ready", "failed"}
 	for _, status := range cases {
@@ -314,6 +290,47 @@ func TestHandlePollStatus_ProcessingShowsStageAndPercent(t *testing.T) {
 	}
 	if !strings.Contains(body, "42") {
 		t.Fatalf("карточка должна показывать процент 42: %s", body)
+	}
+}
+
+func TestHandlePollStatus_ProcessingRendersProgressFragmentOnly(t *testing.T) {
+	repo := &mockRepo{lecture: testLecture("lec-1", "owner", "processing")}
+	core := &mockCore{progress: &TaskProgress{Status: "processing", Stage: "transcribe", ProgressPct: 30}}
+	svc := NewService(repo, core, "secret")
+
+	rec := performPoll(svc, "lec-1", "owner")
+
+	body := rec.Body.String()
+	// фрагмент прогресса присутствует
+	if !strings.Contains(body, `id="lec-progress-lec-1"`) {
+		t.Fatalf("должен вернуться фрагмент прогресса: %s", body)
+	}
+	// НЕ вся карточка (нет внешнего article-id и кнопок)
+	if strings.Contains(body, `id="lec-lec-1"`) {
+		t.Fatalf("при processing не должна возвращаться вся карточка: %s", body)
+	}
+	// retarget на терминале не выставлен
+	if rec.Header().Get("HX-Retarget") != "" {
+		t.Fatalf("HX-Retarget не должен выставляться для processing")
+	}
+}
+
+func TestHandlePollStatus_TerminalRetargetsWholeCard(t *testing.T) {
+	repo := &mockRepo{lecture: testLecture("lec-1", "owner", "processing")}
+	core := &mockCore{progress: &TaskProgress{Status: "ready", ProgressPct: 100}}
+	svc := NewService(repo, core, "secret")
+
+	rec := performPoll(svc, "lec-1", "owner")
+
+	if rec.Header().Get("HX-Retarget") != "#lec-lec-1" {
+		t.Fatalf("HX-Retarget = %q, ожидается #lec-lec-1", rec.Header().Get("HX-Retarget"))
+	}
+	if rec.Header().Get("HX-Reswap") != "outerHTML" {
+		t.Fatalf("HX-Reswap = %q, ожидается outerHTML", rec.Header().Get("HX-Reswap"))
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="lec-lec-1"`) {
+		t.Fatalf("терминальный ответ должен содержать всю карточку: %s", body)
 	}
 }
 

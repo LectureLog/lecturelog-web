@@ -118,13 +118,20 @@ func (s *Service) HandlePollStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	renderCard(w, r, renderLecture)
-}
-
-func renderCard(w http.ResponseWriter, r *http.Request, lec LectureView) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := web.LectureCard(lectureToVM(lec)).Render(r.Context(), w); err != nil {
-		log.Printf("syncsvc: render card %s: %v", lec.ID, err)
+	if isTerminalStatus(renderLecture.Status) {
+		// Терминальный статус: меняем всю карточку (кнопки retry/publish, бейдж).
+		// hx-target поллинга указывал на фрагмент прогресса — перенацеливаем на article.
+		w.Header().Set("HX-Retarget", "#lec-"+renderLecture.ID)
+		w.Header().Set("HX-Reswap", "outerHTML")
+		if err := web.LectureCard(lectureToVM(renderLecture)).Render(r.Context(), w); err != nil {
+			log.Printf("syncsvc: render card %s: %v", renderLecture.ID, err)
+		}
+		return
+	}
+	// Processing: точечно обновляем только фрагмент прогресса.
+	if err := web.LectureProgress(lectureToVM(renderLecture)).Render(r.Context(), w); err != nil {
+		log.Printf("syncsvc: render progress %s: %v", renderLecture.ID, err)
 	}
 }
 
