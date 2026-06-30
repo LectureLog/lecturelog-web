@@ -131,6 +131,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("config.Load: %v", err)
 	}
+	if len(cfg.AdminEmails) == 0 {
+		log.Printf("warning: ADMIN_EMAILS пуст; /settings будет недоступен всем пользователям")
+	}
 
 	core, err := coreclient.New(cfg.CoreClient())
 	if err != nil {
@@ -171,7 +174,13 @@ func main() {
 	provider := auth.NewGoogleProvider(oauthCfg, "https://www.googleapis.com/oauth2/v3/userinfo")
 
 	// Создаём auth.Service
-	authSvc := auth.NewService(repo, provider, cfg.SessionTTL, secureCookies)
+	authSvc := auth.NewService(
+		repo,
+		provider,
+		cfg.SessionTTL,
+		secureCookies,
+		auth.WithAdminEmails(cfg.AdminEmails),
+	)
 
 	// Единый экземпляр db.LectureDB используется обоими адаптерами (lectureRepo и uploadRepo)
 	lectureDB := &db.LectureDB{Pool: pool}
@@ -267,6 +276,7 @@ func main() {
 	handler := web.NewRouter(
 		web.WithGlobalMiddleware(
 			authSvc.LoadSession,                          // читает сессию → *User в контекст
+			authSvc.LoadAdmin,                            // читает allowlist → admin-флаг в контекст
 			csrfExempt("/webhooks/core", csrfMiddleware), // CSRF-защита мутирующих маршрутов, кроме HMAC-вебхука
 			csrfInjector,                                 // кладёт csrf.Token(r) в контекст для layout
 		),
