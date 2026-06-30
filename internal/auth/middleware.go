@@ -72,3 +72,26 @@ func (s *Service) RequireAuth(next http.Handler) http.Handler {
 		http.Redirect(w, r, "/auth/login", http.StatusFound)
 	})
 }
+
+// RequireAdmin пропускает только администраторов и fail-closed для анонимов.
+func (s *Service) RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if IsAdminFromContext(r.Context()) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		user := UserFromContext(r.Context())
+		if user != nil && s.isAdminEmail(user.Email) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if r.Header.Get("HX-Request") == "true" {
+			w.Header().Set("HX-Redirect", "/lectures")
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		http.Redirect(w, r, "/lectures", http.StatusFound)
+	})
+}
