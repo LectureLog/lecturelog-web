@@ -97,25 +97,47 @@ type OAuthProvider interface {
 // Service — доменный сервис auth. Содержит бизнес-логику входа, сессий и middleware.
 // Создаётся через NewService в cmd/server с реальными зависимостями.
 type Service struct {
-	repo       Repository
-	provider   OAuthProvider
-	sessionTTL time.Duration
+	repo        Repository
+	provider    OAuthProvider
+	sessionTTL  time.Duration
+	adminEmails map[string]struct{}
 	// secure — флаг Secure для кук (true в prod, false для локального http).
 	secure bool
 	// now — инъектируемые часы для тестируемости.
 	now func() time.Time
 }
 
+// Option настраивает Service при создании без поломки существующих call site.
+type Option func(*Service)
+
+// WithAdminEmails задаёт allowlist администраторов по каноническим email.
+func WithAdminEmails(emails []string) Option {
+	return func(s *Service) {
+		s.adminEmails = make(map[string]struct{}, len(emails))
+		for _, email := range emails {
+			canonical := canonicalEmail(email)
+			if canonical == "" {
+				continue
+			}
+			s.adminEmails[canonical] = struct{}{}
+		}
+	}
+}
+
 // NewService создаёт Service с зависимостями.
 // secure=true → куки с флагом Secure (для HTTPS prod-окружения).
-func NewService(repo Repository, provider OAuthProvider, sessionTTL time.Duration, secure bool) *Service {
-	return &Service{
+func NewService(repo Repository, provider OAuthProvider, sessionTTL time.Duration, secure bool, opts ...Option) *Service {
+	s := &Service{
 		repo:       repo,
 		provider:   provider,
 		sessionTTL: sessionTTL,
 		secure:     secure,
 		now:        time.Now,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // contextKey — тип для ключей контекста (избегаем конфликтов с другими пакетами).
@@ -124,6 +146,9 @@ type contextKey string
 // ctxKeyUser — ключ для хранения *User в контексте запроса.
 const ctxKeyUser contextKey = "auth_user"
 
+// ctxKeyIsAdmin — ключ для хранения признака администратора в контексте запроса.
+const ctxKeyIsAdmin contextKey = "auth_is_admin"
+
 // UserFromContext извлекает авторизованного пользователя из контекста.
 // Возвращает nil если пользователь не аутентифицирован (анонимный запрос).
 func UserFromContext(ctx context.Context) *User {
@@ -131,7 +156,25 @@ func UserFromContext(ctx context.Context) *User {
 	return u
 }
 
+// IsAdminFromContext извлекает признак администратора из контекста запроса.
+func IsAdminFromContext(ctx context.Context) bool {
+	v, _ := ctx.Value(ctxKeyIsAdmin).(bool)
+	return v
+}
+
 // withUser кладёт пользователя в контекст запроса.
 func withUser(r *http.Request, u *User) *http.Request {
 	return r.WithContext(context.WithValue(r.Context(), ctxKeyUser, u))
+}
+
+func withAdmin(r *http.Request, isAdmin bool) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), ctxKeyIsAdmin, isAdmin))
+}
+
+func (s *Service) isAdminEmail(email string) bool {
+	if len(s.adminEmails) == 0 {
+		return false
+	}
+	_, ok := s.adminEmails[canonicalEmail(email)]
+	return ok
 }

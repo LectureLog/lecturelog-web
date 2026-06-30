@@ -39,6 +39,18 @@ func (s *Service) LoadSession(next http.Handler) http.Handler {
 	})
 }
 
+// LoadAdmin кладёт в контекст флаг администратора для уже загруженного пользователя.
+func (s *Service) LoadAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		user := UserFromContext(r.Context())
+		if user == nil {
+			next.ServeHTTP(w, r)
+			return
+		}
+		next.ServeHTTP(w, withAdmin(r, s.isAdminEmail(user.Email)))
+	})
+}
+
 // RequireAuth блокирует анонимные запросы.
 // Обычный запрос без пользователя → 302 /auth/login.
 // Htmx-запрос (HX-Request: true) → 401 (htmx не обрабатывает редирект как навигацию).

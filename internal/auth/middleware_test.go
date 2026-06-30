@@ -141,6 +141,81 @@ func TestRequireAuth_AuthUser_Next(t *testing.T) {
 	}
 }
 
+func TestIsAdminFromContext_DefaultFalse(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	if IsAdminFromContext(req.Context()) {
+		t.Fatal("IsAdminFromContext должен вернуть false для пустого контекста")
+	}
+}
+
+func TestLoadAdmin_AdminUserSetsContextFlag(t *testing.T) {
+	user := &User{ID: "u-1", Email: " Admin@Example.COM "}
+	sess := &Session{ID: "sess-1", UserID: "u-1", ExpiresAt: time.Now().Add(time.Hour)}
+	mock := &mockRepository{getSessionResult: sess, findUserResult: user}
+	svc := NewService(mock, nil, time.Hour, false, WithAdminEmails([]string{"admin@example.com"}))
+
+	var isAdmin bool
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		isAdmin = IsAdminFromContext(r.Context())
+		w.WriteHeader(http.StatusOK)
+	})
+
+	handler := svc.LoadSession(svc.LoadAdmin(next))
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "sess-1"})
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("код = %d, ожидается 200", w.Code)
+	}
+	if !isAdmin {
+		t.Fatal("LoadAdmin должен положить IsAdmin=true для email из allowlist")
+	}
+}
+
+func TestLoadAdmin_NonAdminAndAnonStayFalse(t *testing.T) {
+	t.Run("non-admin", func(t *testing.T) {
+		user := &User{ID: "u-1", Email: "user@example.com"}
+		sess := &Session{ID: "sess-1", UserID: "u-1", ExpiresAt: time.Now().Add(time.Hour)}
+		mock := &mockRepository{getSessionResult: sess, findUserResult: user}
+		svc := NewService(mock, nil, time.Hour, false, WithAdminEmails([]string{"admin@example.com"}))
+
+		var isAdmin bool
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isAdmin = IsAdminFromContext(r.Context())
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.AddCookie(&http.Cookie{Name: sessionCookieName, Value: "sess-1"})
+		w := httptest.NewRecorder()
+		svc.LoadSession(svc.LoadAdmin(next)).ServeHTTP(w, req)
+
+		if isAdmin {
+			t.Fatal("LoadAdmin не должен ставить IsAdmin=true для не-админа")
+		}
+	})
+
+	t.Run("anon", func(t *testing.T) {
+		svc := NewService(&mockRepository{}, nil, time.Hour, false, WithAdminEmails([]string{"admin@example.com"}))
+
+		var isAdmin bool
+		next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			isAdmin = IsAdminFromContext(r.Context())
+			w.WriteHeader(http.StatusOK)
+		})
+
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		w := httptest.NewRecorder()
+		svc.LoadSession(svc.LoadAdmin(next)).ServeHTTP(w, req)
+
+		if isAdmin {
+			t.Fatal("LoadAdmin не должен ставить IsAdmin=true для анонима")
+		}
+	})
+}
+
 // TestUserFromContext_Nil: из пустого контекста возвращается nil.
 func TestUserFromContext_Nil(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
