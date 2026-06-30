@@ -4,11 +4,19 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ErrEmailNotVerified возвращается, когда провайдер не подтвердил email пользователя.
 // Политика §3: вход разрешён ТОЛЬКО при email_verified=true (анти-account-takeover).
 var ErrEmailNotVerified = errors.New("auth: email пользователя не подтверждён провайдером")
+
+// ErrEmailEmpty возвращается, когда после нормализации email пользователя пуст.
+var ErrEmailEmpty = errors.New("auth: email пользователя пуст после нормализации")
+
+func canonicalEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
 
 // resolveUser реализует чистую доменную логику привязки OAuth-профиля к пользователю платформы.
 //
@@ -23,6 +31,10 @@ func (s *Service) resolveUser(ctx context.Context, p Profile) (*User, error) {
 	// Матч по email разрешён ТОЛЬКО при email_verified=true.
 	if !p.EmailVerified {
 		return nil, ErrEmailNotVerified
+	}
+	p.Email = canonicalEmail(p.Email)
+	if p.Email == "" {
+		return nil, ErrEmailEmpty
 	}
 
 	// Шаг 2: поиск существующего пользователя по email (email = личность, §3).

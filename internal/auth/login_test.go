@@ -21,6 +21,8 @@ type mockRepository struct {
 	getSessionResult *Session
 	getSessionErr    error
 	deleteSessionErr error
+	findEmail        string
+	createdProfile   Profile
 
 	// Счётчики вызовов для проверки инвариантов
 	findCalled   int
@@ -28,15 +30,17 @@ type mockRepository struct {
 	upsertCalled int
 }
 
-func (m *mockRepository) FindUserByEmail(_ context.Context, _ string) (*User, error) {
+func (m *mockRepository) FindUserByEmail(_ context.Context, email string) (*User, error) {
 	m.findCalled++
+	m.findEmail = email
 	return m.findUserResult, m.findUserErr
 }
 func (m *mockRepository) FindUserByID(_ context.Context, _ string) (*User, error) {
 	return m.findUserResult, m.findUserErr
 }
-func (m *mockRepository) CreateUser(_ context.Context, _ Profile) (*User, error) {
+func (m *mockRepository) CreateUser(_ context.Context, p Profile) (*User, error) {
 	m.createCalled++
+	m.createdProfile = p
 	return m.createUserResult, m.createUserErr
 }
 func (m *mockRepository) UpsertIdentity(_ context.Context, _, _, _ string) error {
@@ -79,6 +83,80 @@ func TestResolveUser_EmailNotVerified(t *testing.T) {
 		t.Errorf("CreateUser вызван %d раз, ожидается 0", mock.createCalled)
 	}
 	t.Logf("Ожидаемая ошибка: %v", err)
+}
+
+func TestResolveUser_CanonicalizesEmailForExistingUser(t *testing.T) {
+	existingUser := &User{ID: "user-uuid-123", Email: "admin@example.com"}
+	mock := &mockRepository{findUserResult: existingUser}
+	svc := NewService(mock, nil, time.Hour, false)
+
+	profile := Profile{
+		Provider:      "google",
+		ProviderSub:   "sub-existing",
+		Email:         " Admin@Example.COM ",
+		EmailVerified: true,
+	}
+
+	user, err := svc.resolveUser(context.Background(), profile)
+	if err != nil {
+		t.Fatalf("resolveUser: %v", err)
+	}
+	if user.ID != existingUser.ID {
+		t.Fatalf("user.ID = %q, ожидается %q", user.ID, existingUser.ID)
+	}
+	if mock.findEmail != "admin@example.com" {
+		t.Fatalf("FindUserByEmail email = %q, ожидается canonical email", mock.findEmail)
+	}
+	if mock.createCalled != 0 {
+		t.Fatalf("CreateUser вызван %d раз, ожидается 0", mock.createCalled)
+	}
+}
+
+func TestResolveUser_CanonicalizesEmailForNewUser(t *testing.T) {
+	newUser := &User{ID: "user-uuid-new", Email: "new@example.com"}
+	mock := &mockRepository{createUserResult: newUser}
+	svc := NewService(mock, nil, time.Hour, false)
+
+	profile := Profile{
+		Provider:      "google",
+		ProviderSub:   "sub-new",
+		Email:         " New@Example.COM ",
+		EmailVerified: true,
+	}
+
+	_, err := svc.resolveUser(context.Background(), profile)
+	if err != nil {
+		t.Fatalf("resolveUser: %v", err)
+	}
+	if mock.findEmail != "new@example.com" {
+		t.Fatalf("FindUserByEmail email = %q, ожидается canonical email", mock.findEmail)
+	}
+	if mock.createdProfile.Email != "new@example.com" {
+		t.Fatalf("CreateUser email = %q, ожидается canonical email", mock.createdProfile.Email)
+	}
+}
+
+func TestResolveUser_EmptyCanonicalEmailFailsBeforeRepository(t *testing.T) {
+	mock := &mockRepository{}
+	svc := NewService(mock, nil, time.Hour, false)
+
+	profile := Profile{
+		Provider:      "google",
+		ProviderSub:   "sub-empty",
+		Email:         " \t ",
+		EmailVerified: true,
+	}
+
+	user, err := svc.resolveUser(context.Background(), profile)
+	if !errors.Is(err, ErrEmailEmpty) {
+		t.Fatalf("err = %v, ожидается ErrEmailEmpty", err)
+	}
+	if user != nil {
+		t.Fatalf("user = %+v, ожидается nil", user)
+	}
+	if mock.findCalled != 0 || mock.createCalled != 0 || mock.upsertCalled != 0 {
+		t.Fatalf("repository вызван: find=%d create=%d upsert=%d", mock.findCalled, mock.createCalled, mock.upsertCalled)
+	}
 }
 
 // TestResolveUser_ExistingUser: пользователь найден → upsert identity, без CreateUser.
