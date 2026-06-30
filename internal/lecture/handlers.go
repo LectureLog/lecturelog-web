@@ -239,6 +239,8 @@ func mapErrorCode(code string) string {
 		return "Ошибка загрузки"
 	case "transcription_error":
 		return "Ошибка распознавания речи"
+	case "cookies_invalid":
+		return "Cookies YouTube устарели — обратитесь к администратору"
 	default:
 		if code != "" {
 			return fmt.Sprintf("Ошибка: %s", code)

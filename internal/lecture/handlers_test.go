@@ -42,6 +42,31 @@ func testLecture() lecture.Lecture {
 	}
 }
 
+func TestMapErrorCode_CookiesInvalid(t *testing.T) {
+	lec := testLecture()
+	lec.Status = lecture.StatusFailed
+	lec.ErrorCode = "cookies_invalid"
+	repo := &mockRepo{
+		listByOwner: func(_ context.Context, _ string) ([]lecture.Lecture, error) {
+			return []lecture.Lecture{lec}, nil
+		},
+	}
+	svc := newTestService(repo, &mockCore{})
+	handler := mountTestRouter(svc)
+
+	req := addSessionCookie(httptest.NewRequest(http.MethodGet, "/lectures", nil))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET /lectures = %d, ожидается 200", rec.Code)
+	}
+	want := "Cookies YouTube устарели — обратитесь к администратору"
+	if !strings.Contains(rec.Body.String(), want) {
+		t.Fatalf("карточка должна содержать %q, тело: %s", want, rec.Body.String())
+	}
+}
+
 // testSessionCookie — имя куки сессии (должно совпадать с auth.sessionCookieName="ll_session").
 const testSessionCookie = "ll_session"
 

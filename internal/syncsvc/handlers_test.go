@@ -130,6 +130,14 @@ func TestHandleWebhook_FailedPassesErrorCode(t *testing.T) {
 	assertUpdate(t, repo.updates[0], "task-2", "failed", "bad_input")
 }
 
+func TestMapErrorCode_CookiesInvalid(t *testing.T) {
+	got := mapErrorCode("cookies_invalid")
+	want := "Cookies YouTube устарели — обратитесь к администратору"
+	if got != want {
+		t.Fatalf("mapErrorCode = %q, ожидается %q", got, want)
+	}
+}
+
 func TestHandlePollStatus_NotFoundAndForeignAre404(t *testing.T) {
 	cases := []struct {
 		name    string
