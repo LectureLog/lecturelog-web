@@ -1,6 +1,7 @@
 package config
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -249,6 +250,49 @@ func TestLoad_OptionalOverrides(t *testing.T) {
 	}
 	if !cfg.CoreMinIO.UseSSL {
 		t.Errorf("CoreMinIO.UseSSL: хотели true, получили false")
+	}
+}
+
+func TestLoad_AdminEmailsMissingIsOptional(t *testing.T) {
+	env := fullEnv()
+	delete(env, "ADMIN_EMAILS")
+
+	cfg, err := Load(makeGetenv(env))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(cfg.AdminEmails) != 0 {
+		t.Fatalf("AdminEmails = %#v, ожидается пустой список", cfg.AdminEmails)
+	}
+}
+
+func TestLoad_AdminEmailsCanonicalizesList(t *testing.T) {
+	env := fullEnv()
+	env["ADMIN_EMAILS"] = " Admin@Example.COM, second@example.com "
+
+	cfg, err := Load(makeGetenv(env))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := []string{"admin@example.com", "second@example.com"}
+	if !slices.Equal(cfg.AdminEmails, want) {
+		t.Fatalf("AdminEmails = %#v, ожидается %#v", cfg.AdminEmails, want)
+	}
+}
+
+func TestLoad_AdminEmailsDropsEmptyItems(t *testing.T) {
+	env := fullEnv()
+	env["ADMIN_EMAILS"] = "admin@example.com,, ,owner@example.com,"
+
+	cfg, err := Load(makeGetenv(env))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+
+	want := []string{"admin@example.com", "owner@example.com"}
+	if !slices.Equal(cfg.AdminEmails, want) {
+		t.Fatalf("AdminEmails = %#v, ожидается %#v", cfg.AdminEmails, want)
 	}
 }
 

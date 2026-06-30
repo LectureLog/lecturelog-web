@@ -64,6 +64,9 @@ type Config struct {
 
 	// SessionTTL — TTL пользовательской сессии (SESSION_TTL, дефолт 720h = 30 дней).
 	SessionTTL time.Duration
+
+	// AdminEmails — allowlist администраторов (ADMIN_EMAILS), нормализованный список.
+	AdminEmails []string
 }
 
 // CoreClient возвращает конфигурацию клиента ядра.
@@ -135,6 +138,8 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 	// при пустом raw UseSSL остаётся false (zero-value)
 
+	cfg.AdminEmails = parseAdminEmails(getenv("ADMIN_EMAILS"))
+
 	// PRESIGNED_TTL — time.Duration, дефолт 24h
 	cfg.PresignedTTL = 24 * time.Hour
 	if raw := getenv("PRESIGNED_TTL"); raw != "" {
@@ -172,4 +177,20 @@ func Load(getenv func(string) string) (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func parseAdminEmails(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	emails := make([]string, 0, len(parts))
+	for _, part := range parts {
+		email := strings.ToLower(strings.TrimSpace(part))
+		if email == "" {
+			continue
+		}
+		emails = append(emails, email)
+	}
+	return emails
 }
