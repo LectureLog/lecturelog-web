@@ -49,12 +49,7 @@ func (s *Service) handleListLectures(w http.ResponseWriter, r *http.Request) {
 		vms[i] = lectureToVM(lec)
 	}
 
-	// CSRF-токен для layout (hx-headers); инжектируется через web.CSRFTokenFromContext
-	csrfToken := web.CSRFTokenFromContext(r.Context())
-	data := web.LayoutData{
-		Title:     "Мои лекции",
-		CSRFToken: csrfToken,
-	}
+	data := web.NewLayoutData(r.Context(), "Мои лекции")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := web.LecturesPage(data, vms).Render(r.Context(), w); err != nil {

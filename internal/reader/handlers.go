@@ -44,7 +44,7 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	data := web.LayoutData{Title: view.Title, CSRFToken: web.CSRFTokenFromContext(r.Context())}
+	data := web.NewLayoutData(r.Context(), view.Title)
 	if err := web.ReaderPage(data, readerToVM(view)).Render(r.Context(), w); err != nil {
 		log.Printf("reader: render: %v", err)
 	}
