@@ -4,22 +4,20 @@ package db
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/tern/v2/migrate"
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
-// TestMigrateIntegration запускает контейнер Postgres, применяет миграции
-// и проверяет структуру схемы: таблицы, индексы, перечисления.
-// Запуск: go test -tags=integration ./internal/db/...
-func TestMigrateIntegration(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+func newTestPostgresPool(t *testing.T, ctx context.Context) *pgxpool.Pool {
+	t.Helper()
 
-	// Запуск Postgres в Docker через testcontainers. При отсутствии демона пропускаем тест.
 	pgContainer, err := tcpostgres.Run(ctx,
 		"postgres:16-alpine",
 		tcpostgres.WithDatabase("lecturelogtest"),
@@ -32,26 +30,63 @@ func TestMigrateIntegration(t *testing.T) {
 		),
 	)
 	if err != nil {
-		// Не можем поднять контейнер — пропускаем (инфраструктура недоступна)
 		t.Skipf("testcontainers: не удалось запустить Postgres: %v", err)
 	}
-	defer func() {
+	t.Cleanup(func() {
 		if terr := testcontainers.TerminateContainer(pgContainer); terr != nil {
 			t.Logf("TerminateContainer: %v", terr)
 		}
-	}()
+	})
 
 	dsn, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		t.Fatalf("ConnectionString: %v", err)
 	}
 
-	// Создаём пул через наш New
 	pool, err := New(ctx, dsn)
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
-	defer pool.Close()
+	t.Cleanup(pool.Close)
+
+	return pool
+}
+
+func migrateToVersionForTest(ctx context.Context, t *testing.T, pool *pgxpool.Pool, version int32) {
+	t.Helper()
+
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	defer conn.Release()
+
+	migrator, err := migrate.NewMigrator(ctx, conn.Conn(), "public.schema_version")
+	if err != nil {
+		t.Fatalf("NewMigrator: %v", err)
+	}
+
+	subFS, err := migrationsSubFS()
+	if err != nil {
+		t.Fatalf("migrationsSubFS: %v", err)
+	}
+	if err := migrator.LoadMigrations(subFS); err != nil {
+		t.Fatalf("LoadMigrations: %v", err)
+	}
+	if err := migrator.MigrateTo(ctx, version); err != nil {
+		t.Fatalf("MigrateTo(%d): %v", version, err)
+	}
+}
+
+// TestMigrateIntegration запускает контейнер Postgres, применяет миграции
+// и проверяет структуру схемы: таблицы, индексы, перечисления.
+// Запуск: go test -tags=integration ./internal/db/...
+func TestMigrateIntegration(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pool := newTestPostgresPool(t, ctx)
+	var err error
 
 	// Применяем миграции
 	if err := Migrate(ctx, pool); err != nil {
@@ -180,4 +215,59 @@ func TestMigrateIntegration(t *testing.T) {
 	}
 
 	t.Log("Все проверки пройдены: таблицы, индекс, перечисления на месте; Migrate идемпотентна")
+}
+
+func TestMigrateIntegration_NormalizesExistingUserEmails(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pool := newTestPostgresPool(t, ctx)
+
+	migrateToVersionForTest(ctx, t, pool, 3)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO users (email, name)
+		VALUES (' Admin@Example.COM ', 'Admin')
+	`)
+	if err != nil {
+		t.Fatalf("insert dirty user: %v", err)
+	}
+
+	if err := Migrate(ctx, pool); err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+
+	var email string
+	err = pool.QueryRow(ctx, `SELECT email FROM users WHERE name = 'Admin'`).Scan(&email)
+	if err != nil {
+		t.Fatalf("select email: %v", err)
+	}
+	if email != "admin@example.com" {
+		t.Fatalf("email = %q, ожидается admin@example.com", email)
+	}
+}
+
+func TestMigrateIntegration_FailsOnDuplicateCanonicalEmails(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
+	pool := newTestPostgresPool(t, ctx)
+
+	migrateToVersionForTest(ctx, t, pool, 3)
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO users (email, name)
+		VALUES ('Admin@Example.COM', 'Admin 1'), (' admin@example.com ', 'Admin 2')
+	`)
+	if err != nil {
+		t.Fatalf("insert duplicate users: %v", err)
+	}
+
+	err = Migrate(ctx, pool)
+	if err == nil {
+		t.Fatal("Migrate должен упасть на дублях после canonicalization")
+	}
+	if !strings.Contains(err.Error(), "duplicate users.email after canonicalization") {
+		t.Fatalf("ошибка = %v, ожидается понятное сообщение про дубли", err)
+	}
 }
