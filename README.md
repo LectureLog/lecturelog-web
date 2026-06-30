@@ -285,6 +285,7 @@ func Load(getenv func(string) string) (*Config, error)
 | `GOOGLE_CLIENT_ID` | Google OAuth client id | да | — |
 | `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | да | — |
 | `PLATFORM_CALLBACK_URL` | OAuth callback URL | да | — |
+| `ADMIN_EMAILS` | Allowlist админов для `/settings*`, email через запятую; пусто = fail-closed | нет | пустой список |
 | `LECTURELOG_WEBHOOK_SECRET` | HMAC-секрет вебхука (общий с ядром) | да | — |
 | `PLATFORM_DB_DSN` | DSN Postgres платформы (pgx) | да | — |
 | `CORE_API_BASE_URL` | Базовый URL ядра (без `/api/v1`) | да | — |
@@ -397,10 +398,19 @@ Postgres, CSRF-защита и middleware прав.
 **Создание сервиса:**
 
 ```go
-auth.NewService(repo Repository, provider OAuthProvider, sessionTTL time.Duration, secure bool) *Service
+auth.NewService(repo Repository, provider OAuthProvider, sessionTTL time.Duration, secure bool, opts ...Option) *Service
 ```
 
 `secure=true` выставляет флаг `Secure` на всех куках — использовать в prod (HTTPS).
+Allowlist администраторов подключается опцией:
+
+```go
+auth.NewService(repo, provider, cfg.SessionTTL, secure, auth.WithAdminEmails(cfg.AdminEmails))
+```
+
+`cfg.AdminEmails` читается из `ADMIN_EMAILS`: email канонизируются, пустое
+значение допустимо и работает fail-closed — админские маршруты, включая
+`/settings*`, будут недоступны всем пользователям.
 
 **OAuth flow (Google OAuth 2.0).** Профиль берётся из userinfo endpoint (не из
 `id_token`). State-параметр генерируется через `crypto/rand` безусловно; сверка —
@@ -438,8 +448,14 @@ constant-time (`hmac.Equal`-эквивалент) — защищает OAuth rou
 - `LoadSession` — читает `ll_session`, валидирует через `Repository.GetSession`
   (фильтрация `expires_at > now()` на стороне Postgres), кладёт `*User` в контекст
   через `UserFromContext`. Анонимные запросы пропускает.
+- `LoadAdmin` — после `LoadSession` сравнивает email текущего пользователя с
+  allowlist из `ADMIN_EMAILS` и кладёт admin-флаг в контекст для layout и
+  защищённых хендлеров.
 - `RequireAuth` — блокирует анонимов: обычный запрос → `302 /auth/login`, htmx
   (`HX-Request: true`) → `401` (htmx не обрабатывает редирект как навигацию).
+- `RequireAdmin` — блокирует не-админов для admin-only маршрутов: обычный запрос
+  → `302 /lectures`, htmx → `200` с `HX-Redirect: /lectures`. Проверка
+  fail-closed, поэтому пустой `ADMIN_EMAILS` не даёт доступа к `/settings*`.
 
 **CSRF.** `gorilla/csrf` монтируется в `cmd/server` глобально (ключ 32 байта,
 `csrf.RequestHeader("X-CSRF-Token")`). Под htmx токен передаётся через
@@ -768,6 +784,7 @@ config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.Ne
 web.NewRouter(
     web.WithGlobalMiddleware(
         authSvc.LoadSession,
+        authSvc.LoadAdmin,
         csrfExempt("/webhooks/core", csrfMiddleware), // вебхук ядра выведен из-под CSRF
         csrfInjector,
     ),
@@ -786,6 +803,10 @@ web.NewRouter(
     }),
 )
 ```
+
+Когда в ветке присутствует сервис настроек, маршруты `/settings*` должны
+монтироваться отдельной защищённой группой под `RequireAuth -> RequireAdmin`;
+под bare `RequireAuth` их монтировать нельзя.
 
 **Адрес** задаётся через `PLATFORM_ADDR` (дефолт `:8080`).
 
