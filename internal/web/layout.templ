@@ -1,6 +1,11 @@
 package web
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+
+	"github.com/LectureLog/lecturelog-web/internal/auth"
+)
 
 // LayoutData — данные шапки и документа базового каркаса.
 type LayoutData struct {
@@ -10,6 +15,17 @@ type LayoutData struct {
 	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами).
 	// Заполняется в main через csrf-инжектор (§7 плана).
 	CSRFToken string
+	// IsAdmin — признак администратора для отображения ссылок админки.
+	IsAdmin bool
+}
+
+// NewLayoutData собирает данные layout из контекста запроса.
+func NewLayoutData(ctx context.Context, title string) LayoutData {
+	return LayoutData{
+		Title:     title,
+		CSRFToken: CSRFTokenFromContext(ctx),
+		IsAdmin:   auth.IsAdminFromContext(ctx),
+	}
 }
 
 // csrfHeaders формирует JSON-строку для hx-headers.
@@ -69,6 +85,9 @@ templ header(data LayoutData, actions templ.Component) {
 				if actions != nil {
 					@actions
 				}
+				if data.IsAdmin {
+					@adminGearLink()
+				}
 				@themeToggle()
 			</div>
 		</div>
@@ -87,6 +106,13 @@ templ themeToggle() {
 		<!-- Иконка солнца (тёмная тема активна) -->
 		@iconSun()
 	</button>
+}
+
+// adminGearLink — вход в админские настройки.
+templ adminGearLink() {
+	<a class="ll-icon-btn" href="/settings" aria-label="Настройки" title="Настройки">
+		@iconSettings()
+	</a>
 }
 
 // brandMark — логотип-квадрат 24px цвета --accent с иконкой книги.

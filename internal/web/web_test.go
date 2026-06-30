@@ -24,6 +24,16 @@ func renderLayout(t *testing.T, title string) string {
 	return b.String()
 }
 
+func renderLayoutWithData(t *testing.T, data web.LayoutData) string {
+	t.Helper()
+	var b bytes.Buffer
+	err := web.Layout(data, nil).Render(context.Background(), &b)
+	if err != nil {
+		t.Fatalf("Layout.Render: %v", err)
+	}
+	return b.String()
+}
+
 // renderUploadPage — вспомогательная функция: рендерит UploadPage в строку.
 func renderUploadPage(t *testing.T) string {
 	t.Helper()
@@ -113,6 +123,44 @@ func TestLayout_ThemeToggle(t *testing.T) {
 	}
 	if !strings.Contains(html, "ll-icon-sun") {
 		t.Error("ожидается иконка солнца (ll-icon-sun) для тумблера темы")
+	}
+}
+
+func TestLayout_AdminGearVisibleForAdmin(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true})
+
+	if !strings.Contains(html, `href="/settings"`) {
+		t.Fatal("для админа ожидается ссылка на /settings")
+	}
+	if !strings.Contains(html, `aria-label="Настройки"`) {
+		t.Fatal("ожидается aria-label для ссылки настроек")
+	}
+	if !strings.Contains(html, "ll-icon-settings") {
+		t.Fatal("ожидается иконка настроек")
+	}
+}
+
+func TestLayout_AdminGearHiddenForNonAdmin(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: false})
+
+	if strings.Contains(html, `href="/settings"`) {
+		t.Fatal("для не-админа ссылка на /settings не должна рендериться")
+	}
+}
+
+func TestNewLayoutData_DefaultsToContextValues(t *testing.T) {
+	ctx := web.WithCSRFToken(context.Background(), "csrf-token")
+
+	data := web.NewLayoutData(ctx, "Тест")
+
+	if data.Title != "Тест" {
+		t.Fatalf("Title = %q, ожидается Тест", data.Title)
+	}
+	if data.CSRFToken != "csrf-token" {
+		t.Fatalf("CSRFToken = %q, ожидается csrf-token", data.CSRFToken)
+	}
+	if data.IsAdmin {
+		t.Fatal("IsAdmin должен быть false без admin-флага в контексте")
 	}
 }
 
