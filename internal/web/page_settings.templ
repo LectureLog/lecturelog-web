@@ -1,0 +1,180 @@
+package web
+
+import (
+	"fmt"
+	"time"
+
+	"github.com/LectureLog/lecturelog-web/internal/coreclient"
+)
+
+// SettingsPage — страница настроек администратора. Сейчас единственная секция —
+// YouTube cookies; каркас рассчитан на будущие секции (без sidebar-навигации, YAGNI).
+// coreUnavailable — true, если сервер не смог получить статус cookies при рендере
+// страницы (ядро недоступно); в этом случае секция статуса показывает «недоступен»,
+// но форма загрузки остаётся видимой.
+templ SettingsPage(data LayoutData, st coreclient.CookieStatus, coreUnavailable bool) {
+	@Layout(data, nil) {
+		<section id="ll-settings" class="ll-settings">
+			<div class="ll-settings-head">
+				<div class="ll-settings-kicker">Настройки</div>
+				<h1 class="ll-settings-title">Настройки</h1>
+			</div>
+			<div class="ll-settings-card">
+				<h2 class="ll-settings-card-title">YouTube cookies</h2>
+				<p class="ll-settings-card-sub">Нужны для загрузки приватных, возрастных и региональных видео с YouTube.</p>
+				@cookieWarning()
+				if coreUnavailable {
+					@CookieStatusError("Статус недоступен: ядро временно не отвечает")
+				} else {
+					@CookieStatusFragment(st)
+				}
+				<form
+					class="ll-settings-form"
+					hx-post="/settings/cookies"
+					hx-target="#cookie-status"
+					hx-swap="outerHTML"
+					hx-encoding="multipart/form-data"
+					hx-indicator="#settings-upload-indicator"
+					hx-headers={ `{"X-CSRF-Token":"` + data.CSRFToken + `"}` }
+					method="post"
+				>
+					<label class="ll-settings-file-label" for="cookie-file">Файл cookies.txt</label>
+					<div class="ll-settings-file-row">
+						<label class="ll-settings-file-pick">
+							@iconUploadFile()
+							<span>Выбрать файл</span>
+							<input id="cookie-file" class="ll-settings-file-input" type="file" name="file" accept=".txt"/>
+						</label>
+						<span class="ll-settings-file-name" data-settings-file-name>Файл не выбран</span>
+					</div>
+					<p class="ll-settings-file-hint">Экспортируйте cookies.txt в формате Netscape через расширение браузера (например, «Get cookies.txt LOCALLY») на странице youtube.com, затем загрузите файл сюда.</p>
+					<p class="ll-settings-file-formats">.TXT — формат Netscape · до 1 МБ</p>
+					<div class="ll-settings-cta-row">
+						<button class="ll-settings-cta" type="submit">
+							<span>Загрузить</span>
+						</button>
+						<span id="settings-upload-indicator" class="ll-settings-indicator htmx-indicator">
+							@iconSpinner()
+							<span>Загружаем…</span>
+						</span>
+					</div>
+				</form>
+			</div>
+		</section>
+		<script src="/static/js/settings.js" defer></script>
+	}
+}
+
+// cookieWarning — нейтральное (не акцентное) предупреждение о чувствительности cookies.
+// Акцентный цвет намеренно не используется — он зарезервирован под позитивные состояния.
+templ cookieWarning() {
+	<div class="ll-settings-warning">
+		<span class="ll-settings-warning-icon">
+			@iconWarning()
+		</span>
+		<div class="ll-settings-warning-body">
+			<div class="ll-settings-warning-kicker">Внимание</div>
+			<p class="ll-settings-warning-text">Cookies дают полный доступ к вашему YouTube-аккаунту — по ним можно зайти в аккаунт, смотреть историю и менять настройки. Не используйте основной личный аккаунт: заведите для загрузок отдельный, «технический».</p>
+		</div>
+	</div>
+}
+
+// CookieStatusFragment — фрагмент статуса cookies для первичного рендера и htmx-свапа
+// после загрузки/удаления. Корень — #cookie-status, именно его заменяет hx-swap="outerHTML".
+templ CookieStatusFragment(st coreclient.CookieStatus) {
+	<div id="cookie-status" class="ll-settings-status" aria-live="polite">
+		if st.Exists {
+			<span class="ll-settings-status-dot ll-settings-status-dot--filled"></span>
+			<div class="ll-settings-status-body">
+				<div class="ll-settings-status-title">Cookies загружены</div>
+				<div class="ll-settings-status-meta">{ cookieMeta(st) }</div>
+			</div>
+			<button
+				class="ll-settings-delete"
+				hx-delete="/settings/cookies"
+				hx-target="#cookie-status"
+				hx-swap="outerHTML"
+				hx-confirm="Удалить сохранённые YouTube-cookies? Загрузка приватных и возрастных видео перестанет работать."
+				hx-headers={ `{"X-CSRF-Token":"` + CSRFTokenFromContext(ctx) + `"}` }
+				aria-label="Удалить cookies"
+			>
+				@iconTrash()
+				<span>Удалить cookies</span>
+			</button>
+		} else {
+			<span class="ll-settings-status-dot"></span>
+			<div class="ll-settings-status-body">
+				<div class="ll-settings-status-title">Cookies не загружены</div>
+				<div class="ll-settings-status-meta">Загрузка приватных, возрастных и региональных видео с YouTube будет недоступна.</div>
+			</div>
+		}
+	</div>
+}
+
+// CookieStatusError — фрагмент ошибки cookies (тот же #cookie-status, чтобы
+// hx-swap="outerHTML" красиво подставил стилизованный errnote вместо голого текста).
+templ CookieStatusError(message string) {
+	<div id="cookie-status" class="ll-settings-status ll-settings-status--error" aria-live="polite">
+		<span class="ll-settings-status-icon">
+			@iconWarning()
+		</span>
+		<div class="ll-settings-status-body">
+			<div class="ll-settings-status-title">{ message }</div>
+		</div>
+	</div>
+}
+
+// cookieMeta форматирует мета-строку статуса: дата (если есть) и размер.
+// Дата — абсолютная, "02 Jan 2006" (RFC3339 → человеческий формат).
+func cookieMeta(st coreclient.CookieStatus) string {
+	size := formatCookieSize(st.Size)
+	date := formatCookieDate(st.UpdatedAt)
+	if date == "" {
+		return size
+	}
+	return fmt.Sprintf("Обновлены %s · %s", date, size)
+}
+
+// formatCookieDate парсит RFC3339 и форматирует "02 Jan 2006". Пустая/некорректная
+// строка → пустой результат (мета покажет только размер).
+func formatCookieDate(updatedAt string) string {
+	if updatedAt == "" {
+		return ""
+	}
+	t, err := time.Parse(time.RFC3339, updatedAt)
+	if err != nil {
+		return ""
+	}
+	return t.Format("02 Jan 2006")
+}
+
+// formatCookieSize форматирует размер файла: КБ при <1МБ (округление вверх), иначе МБ.
+func formatCookieSize(size int) string {
+	const mb = 1 << 20
+	const kb = 1 << 10
+	if size < mb {
+		kbSize := (size + kb - 1) / kb
+		if kbSize < 1 {
+			kbSize = 1
+		}
+		return fmt.Sprintf("%d КБ", kbSize)
+	}
+	mbSize := float64(size) / float64(mb)
+	return fmt.Sprintf("%.1f МБ", mbSize)
+}
+
+// iconWarning — иконка предупреждения (треугольник с восклицательным знаком).
+templ iconWarning() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="m10.29 3.86-8.18 14.18A2 2 0 0 0 4 21h16a2 2 0 0 0 1.89-2.96L13.71 3.86a2 2 0 0 0-3.42 0Z"></path>
+		<line x1="12" y1="9" x2="12" y2="13"></line>
+		<line x1="12" y1="17" x2="12.01" y2="17"></line>
+	</svg>
+}
+
+// iconSpinner — тонкая крутящаяся иконка индикатора загрузки (htmx-indicator).
+templ iconSpinner() {
+	<svg class="ll-settings-spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+		<path d="M12 2a10 10 0 0 1 10 10"></path>
+	</svg>
+}

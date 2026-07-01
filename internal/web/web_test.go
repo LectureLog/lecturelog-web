@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 	"github.com/go-chi/chi/v5"
 )
@@ -653,5 +654,91 @@ func TestLectureCard_Failed(t *testing.T) {
 	// Текст ошибки
 	if !strings.Contains(html, "Ошибка обработки") {
 		t.Error("ожидается текст ошибки в карточке")
+	}
+}
+
+// ─── Страница настроек (/settings) и фрагмент статуса YouTube-cookies ──────
+
+// renderCookieStatusFragment — вспомогательная функция: рендерит
+// CookieStatusFragment в строку с контекстом, несущим CSRF-токен
+// (нужен кнопке удаления — hx-headers читает его через ctx).
+func renderCookieStatusFragment(t *testing.T, st coreclient.CookieStatus) string {
+	t.Helper()
+	var b bytes.Buffer
+	ctx := web.WithCSRFToken(context.Background(), "tok")
+	if err := web.CookieStatusFragment(st).Render(ctx, &b); err != nil {
+		t.Fatalf("CookieStatusFragment.Render: %v", err)
+	}
+	return b.String()
+}
+
+func TestCookieStatusFragment_Exists(t *testing.T) {
+	html := renderCookieStatusFragment(t, coreclient.CookieStatus{
+		Exists:    true,
+		Size:      120,
+		UpdatedAt: "2026-06-29T10:00:00Z",
+	})
+
+	if !strings.Contains(html, "загружены") {
+		t.Error("ожидается текст «загружены» при Exists=true")
+	}
+	if !strings.Contains(html, "29 Jun 2026") {
+		t.Errorf("ожидается дата в формате «02 Jan 2006» (29 Jun 2026): %s", html)
+	}
+	if !strings.Contains(html, `id="cookie-status"`) {
+		t.Error("ожидается корневой узел #cookie-status")
+	}
+	if !strings.Contains(html, `hx-delete="/settings/cookies"`) {
+		t.Error("ожидается кнопка удаления hx-delete=\"/settings/cookies\" при Exists=true")
+	}
+}
+
+func TestCookieStatusFragment_NotExists(t *testing.T) {
+	html := renderCookieStatusFragment(t, coreclient.CookieStatus{Exists: false})
+
+	if !strings.Contains(html, "не загружены") {
+		t.Error("ожидается текст «не загружены» при Exists=false")
+	}
+	if strings.Contains(html, "hx-delete") {
+		t.Error("кнопки удаления не должно быть в DOM при Exists=false")
+	}
+}
+
+func TestSettingsPage_ContainsUploadFormAndStatus(t *testing.T) {
+	var b bytes.Buffer
+	ctx := web.WithCSRFToken(context.Background(), "tok")
+	data := web.NewLayoutData(ctx, "Настройки")
+	st := coreclient.CookieStatus{Exists: true, Size: 120, UpdatedAt: "2026-06-29T10:00:00Z"}
+	if err := web.SettingsPage(data, st, false).Render(ctx, &b); err != nil {
+		t.Fatalf("SettingsPage.Render: %v", err)
+	}
+	html := b.String()
+
+	if !strings.Contains(html, `hx-post="/settings/cookies"`) {
+		t.Error("ожидается форма hx-post=\"/settings/cookies\"")
+	}
+	if !strings.Contains(html, `id="cookie-status"`) {
+		t.Error("ожидается узел #cookie-status")
+	}
+	if !strings.Contains(html, `hx-delete="/settings/cookies"`) {
+		t.Error("ожидается кнопка удаления при Exists=true")
+	}
+}
+
+func TestSettingsPage_CoreUnavailable(t *testing.T) {
+	var b bytes.Buffer
+	ctx := web.WithCSRFToken(context.Background(), "tok")
+	data := web.NewLayoutData(ctx, "Настройки")
+	if err := web.SettingsPage(data, coreclient.CookieStatus{}, true).Render(ctx, &b); err != nil {
+		t.Fatalf("SettingsPage.Render: %v", err)
+	}
+	html := b.String()
+
+	if !strings.Contains(html, "недоступ") {
+		t.Errorf("ожидается текст о недоступности статуса при coreUnavailable=true: %s", html)
+	}
+	// Форма загрузки остаётся видимой даже при недоступном ядре.
+	if !strings.Contains(html, `hx-post="/settings/cookies"`) {
+		t.Error("форма загрузки должна оставаться видимой при coreUnavailable=true")
 	}
 }
