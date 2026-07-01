@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/oapi-codegen/runtime"
 )
@@ -66,11 +67,23 @@ type BodyCreateTaskApiV1TasksPost struct {
 	VideoUrl *string `json:"video_url,omitempty"`
 }
 
+// BodyPutYoutubeCookiesApiV1YoutubeCookiesPut defines model for Body_put_youtube_cookies_api_v1_youtube_cookies_put.
+type BodyPutYoutubeCookiesApiV1YoutubeCookiesPut struct {
+	File string `json:"file"`
+}
+
 // ByModelEntry defines model for ByModelEntry.
 type ByModelEntry struct {
 	Calls  int `json:"calls"`
 	Output int `json:"output"`
 	Prompt int `json:"prompt"`
+}
+
+// CookieStatusResponse defines model for CookieStatusResponse.
+type CookieStatusResponse struct {
+	Exists    bool       `json:"exists"`
+	Size      int        `json:"size"`
+	UpdatedAt *time.Time `json:"updated_at,omitempty"`
 }
 
 // CreateTaskResponse defines model for CreateTaskResponse.
@@ -207,6 +220,9 @@ type CreateTaskApiV1TasksPostMultipartRequestBody = BodyCreateTaskApiV1TasksPost
 
 // CreateUploadUrlApiV1UploadsPostJSONRequestBody defines body for CreateUploadUrlApiV1UploadsPost for application/json ContentType.
 type CreateUploadUrlApiV1UploadsPostJSONRequestBody = UploadUrlRequest
+
+// PutYoutubeCookiesApiV1YoutubeCookiesPutMultipartRequestBody defines body for PutYoutubeCookiesApiV1YoutubeCookiesPut for multipart/form-data ContentType.
+type PutYoutubeCookiesApiV1YoutubeCookiesPutMultipartRequestBody = BodyPutYoutubeCookiesApiV1YoutubeCookiesPut
 
 // AsValidationErrorLoc0 returns the union data inside the ValidationError_Loc_Item as a ValidationErrorLoc0
 func (t ValidationError_Loc_Item) AsValidationErrorLoc0() (ValidationErrorLoc0, error) {
@@ -368,6 +384,15 @@ type ClientInterface interface {
 	CreateUploadUrlApiV1UploadsPostWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	CreateUploadUrlApiV1UploadsPost(ctx context.Context, body CreateUploadUrlApiV1UploadsPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// DeleteYoutubeCookiesApiV1YoutubeCookiesDelete request
+	DeleteYoutubeCookiesApiV1YoutubeCookiesDelete(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetYoutubeCookiesApiV1YoutubeCookiesGet request
+	GetYoutubeCookiesApiV1YoutubeCookiesGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// PutYoutubeCookiesApiV1YoutubeCookiesPutWithBody request with any body
+	PutYoutubeCookiesApiV1YoutubeCookiesPutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) HealthApiV1HealthGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -468,6 +493,42 @@ func (c *Client) CreateUploadUrlApiV1UploadsPostWithBody(ctx context.Context, co
 
 func (c *Client) CreateUploadUrlApiV1UploadsPost(ctx context.Context, body CreateUploadUrlApiV1UploadsPostJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateUploadUrlApiV1UploadsPostRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) DeleteYoutubeCookiesApiV1YoutubeCookiesDelete(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetYoutubeCookiesApiV1YoutubeCookiesGet(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetYoutubeCookiesApiV1YoutubeCookiesGetRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) PutYoutubeCookiesApiV1YoutubeCookiesPutWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewPutYoutubeCookiesApiV1YoutubeCookiesPutRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -798,6 +859,89 @@ func NewCreateUploadUrlApiV1UploadsPostRequestWithBody(server string, contentTyp
 	return req, nil
 }
 
+// NewDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteRequest generates requests for DeleteYoutubeCookiesApiV1YoutubeCookiesDelete
+func NewDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/youtube/cookies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodDelete, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewGetYoutubeCookiesApiV1YoutubeCookiesGetRequest generates requests for GetYoutubeCookiesApiV1YoutubeCookiesGet
+func NewGetYoutubeCookiesApiV1YoutubeCookiesGetRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/youtube/cookies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodGet, queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewPutYoutubeCookiesApiV1YoutubeCookiesPutRequestWithBody generates requests for PutYoutubeCookiesApiV1YoutubeCookiesPut with any type of body
+func NewPutYoutubeCookiesApiV1YoutubeCookiesPutRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/api/v1/youtube/cookies")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest(http.MethodPut, queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -866,6 +1010,15 @@ type ClientWithResponsesInterface interface {
 	CreateUploadUrlApiV1UploadsPostWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateUploadUrlApiV1UploadsPostResponse, error)
 
 	CreateUploadUrlApiV1UploadsPostWithResponse(ctx context.Context, body CreateUploadUrlApiV1UploadsPostJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateUploadUrlApiV1UploadsPostResponse, error)
+
+	// DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse request
+	DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse, error)
+
+	// GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse request
+	GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetYoutubeCookiesApiV1YoutubeCookiesGetResponse, error)
+
+	// PutYoutubeCookiesApiV1YoutubeCookiesPutWithBodyWithResponse request with any body
+	PutYoutubeCookiesApiV1YoutubeCookiesPutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutYoutubeCookiesApiV1YoutubeCookiesPutResponse, error)
 }
 
 type HealthApiV1HealthGetResponse struct {
@@ -1124,6 +1277,98 @@ func (r CreateUploadUrlApiV1UploadsPostResponse) ContentType() string {
 	return ""
 }
 
+type DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+}
+
+// Status returns HTTPResponse.Status
+func (r DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type GetYoutubeCookiesApiV1YoutubeCookiesGetResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CookieStatusResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r GetYoutubeCookiesApiV1YoutubeCookiesGetResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetYoutubeCookiesApiV1YoutubeCookiesGetResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r GetYoutubeCookiesApiV1YoutubeCookiesGetResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
+type PutYoutubeCookiesApiV1YoutubeCookiesPutResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CookieStatusResponse
+	JSON400      *ErrorResponse
+	JSON413      *ErrorResponse
+	JSON422      *HTTPValidationError
+}
+
+// Status returns HTTPResponse.Status
+func (r PutYoutubeCookiesApiV1YoutubeCookiesPutResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r PutYoutubeCookiesApiV1YoutubeCookiesPutResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+// ContentType is a convenience method to retrieve the Content-Type value from the HTTP response headers
+func (r PutYoutubeCookiesApiV1YoutubeCookiesPutResponse) ContentType() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Header.Get("Content-Type")
+	}
+	return ""
+}
+
 // HealthApiV1HealthGetWithResponse request returning *HealthApiV1HealthGetResponse
 func (c *ClientWithResponses) HealthApiV1HealthGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthApiV1HealthGetResponse, error) {
 	rsp, err := c.HealthApiV1HealthGet(ctx, reqEditors...)
@@ -1202,6 +1447,33 @@ func (c *ClientWithResponses) CreateUploadUrlApiV1UploadsPostWithResponse(ctx co
 		return nil, err
 	}
 	return ParseCreateUploadUrlApiV1UploadsPostResponse(rsp)
+}
+
+// DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse request returning *DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse
+func (c *ClientWithResponses) DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse, error) {
+	rsp, err := c.DeleteYoutubeCookiesApiV1YoutubeCookiesDelete(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse(rsp)
+}
+
+// GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse request returning *GetYoutubeCookiesApiV1YoutubeCookiesGetResponse
+func (c *ClientWithResponses) GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetYoutubeCookiesApiV1YoutubeCookiesGetResponse, error) {
+	rsp, err := c.GetYoutubeCookiesApiV1YoutubeCookiesGet(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetYoutubeCookiesApiV1YoutubeCookiesGetResponse(rsp)
+}
+
+// PutYoutubeCookiesApiV1YoutubeCookiesPutWithBodyWithResponse request with arbitrary body returning *PutYoutubeCookiesApiV1YoutubeCookiesPutResponse
+func (c *ClientWithResponses) PutYoutubeCookiesApiV1YoutubeCookiesPutWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*PutYoutubeCookiesApiV1YoutubeCookiesPutResponse, error) {
+	rsp, err := c.PutYoutubeCookiesApiV1YoutubeCookiesPutWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePutYoutubeCookiesApiV1YoutubeCookiesPutResponse(rsp)
 }
 
 // ParseHealthApiV1HealthGetResponse parses an HTTP response from a HealthApiV1HealthGetWithResponse call
@@ -1517,6 +1789,95 @@ func ParseCreateUploadUrlApiV1UploadsPostResponse(rsp *http.Response) (*CreateUp
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest HTTPValidationError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse parses an HTTP response from a DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse call
+func ParseDeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse(rsp *http.Response) (*DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	return response, nil
+}
+
+// ParseGetYoutubeCookiesApiV1YoutubeCookiesGetResponse parses an HTTP response from a GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse call
+func ParseGetYoutubeCookiesApiV1YoutubeCookiesGetResponse(rsp *http.Response) (*GetYoutubeCookiesApiV1YoutubeCookiesGetResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetYoutubeCookiesApiV1YoutubeCookiesGetResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CookieStatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParsePutYoutubeCookiesApiV1YoutubeCookiesPutResponse parses an HTTP response from a PutYoutubeCookiesApiV1YoutubeCookiesPutWithResponse call
+func ParsePutYoutubeCookiesApiV1YoutubeCookiesPutResponse(rsp *http.Response) (*PutYoutubeCookiesApiV1YoutubeCookiesPutResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &PutYoutubeCookiesApiV1YoutubeCookiesPutResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CookieStatusResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 400:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON400 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 413:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON413 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest HTTPValidationError
