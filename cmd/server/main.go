@@ -25,6 +25,7 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/lecture"
 	"github.com/LectureLog/lecturelog-web/internal/reader"
 	"github.com/LectureLog/lecturelog-web/internal/s3"
+	"github.com/LectureLog/lecturelog-web/internal/settings"
 	"github.com/LectureLog/lecturelog-web/internal/syncsvc"
 	"github.com/LectureLog/lecturelog-web/internal/upload"
 	"github.com/LectureLog/lecturelog-web/internal/web"
@@ -233,6 +234,9 @@ func main() {
 	upRepo := &uploadRepo{lectures: lectureDB}
 	uploadSvc := upload.NewService(core, upRepo, signer, cfg.PresignedTTL)
 
+	// Создаём settings.Service: страница настроек + управление YouTube-cookies.
+	settingsSvc := settings.NewService(core)
+
 	// ─── C1-sync wiring ───
 	syncSvc := syncsvc.NewService(
 		&syncRepo{lectures: lectureDB},
@@ -277,6 +281,7 @@ func main() {
 		web.WithGlobalMiddleware(
 			authSvc.LoadSession,                          // читает сессию → *User в контекст
 			authSvc.LoadAdmin,                            // читает allowlist → admin-флаг в контекст
+			settingsAvailable,                            // помечает контекст: /settings* смонтирован (шестерёнка в шапке)
 			csrfExempt("/webhooks/core", csrfMiddleware), // CSRF-защита мутирующих маршрутов, кроме HMAC-вебхука
 			csrfInjector,                                 // кладёт csrf.Token(r) в контекст для layout
 		),
@@ -315,6 +320,14 @@ func main() {
 				pr.Get("/lectures/{id}/status", syncSvc.HandlePollStatus)
 			})
 		}),
+		web.WithMount(func(r chi.Router) {
+			// Единственная точка монтирования /settings*: сначала «залогинен», потом «админ».
+			r.Group(func(sr chi.Router) {
+				sr.Use(authSvc.RequireAuth)
+				sr.Use(authSvc.RequireAdmin)
+				settingsSvc.Mount(sr) // GET /settings, GET /settings/cookies/status, POST/DELETE /settings/cookies
+			})
+		}),
 	)
 
 	addr := envOr("PLATFORM_ADDR", ":8080")
@@ -322,6 +335,16 @@ func main() {
 	if err := http.ListenAndServe(addr, handler); err != nil {
 		log.Fatalf("ListenAndServe: %v", err)
 	}
+}
+
+// settingsAvailable помечает каждый запрос флагом наличия /settings routes,
+// чтобы шестерёнка в шапке рендерилась админу на всех страницах (web.WithSettingsAvailable —
+// context-хелпер, здесь — тонкая http-обёртка над ним для WithGlobalMiddleware).
+// Ставится безусловно: этот сервер всегда монтирует реальные /settings* (см. выше).
+func settingsAvailable(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(web.WithSettingsAvailable(r.Context())))
+	})
 }
 
 // envOr возвращает значение переменной окружения key или def если переменная не задана.
