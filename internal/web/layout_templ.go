@@ -25,14 +25,17 @@ type LayoutData struct {
 	CSRFToken string
 	// IsAdmin — признак администратора для отображения ссылок админки.
 	IsAdmin bool
+	// SettingsAvailable — признак доступности settings-маршрутов в текущем сервере.
+	SettingsAvailable bool
 }
 
 // NewLayoutData собирает данные layout из контекста запроса.
 func NewLayoutData(ctx context.Context, title string) LayoutData {
 	return LayoutData{
-		Title:     title,
-		CSRFToken: CSRFTokenFromContext(ctx),
-		IsAdmin:   auth.IsAdminFromContext(ctx),
+		Title:             title,
+		CSRFToken:         CSRFTokenFromContext(ctx),
+		IsAdmin:           auth.IsAdminFromContext(ctx),
+		SettingsAvailable: SettingsAvailableFromContext(ctx),
 	}
 }
 
@@ -76,7 +79,7 @@ func Layout(data LayoutData, actions templ.Component) templ.Component {
 		var templ_7745c5c3_Var2 string
 		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(data.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 64, Col: 22}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 67, Col: 22}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
 		if templ_7745c5c3_Err != nil {
@@ -89,7 +92,7 @@ func Layout(data LayoutData, actions templ.Component) templ.Component {
 		var templ_7745c5c3_Var3 string
 		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.ResolveAttributeValue(csrfHeaders(data.CSRFToken))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 67, Col: 48}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 70, Col: 48}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var3)
 		if templ_7745c5c3_Err != nil {
@@ -156,7 +159,7 @@ func header(data LayoutData, actions templ.Component) templ.Component {
 		var templ_7745c5c3_Var5 string
 		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(data.Title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 82, Col: 41}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `layout.templ`, Line: 85, Col: 41}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
@@ -172,7 +175,7 @@ func header(data LayoutData, actions templ.Component) templ.Component {
 				return templ_7745c5c3_Err
 			}
 		}
-		if data.IsAdmin {
+		if data.IsAdmin && data.SettingsAvailable {
 			templ_7745c5c3_Err = adminGearLink().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err

@@ -327,6 +327,8 @@ func Load(getenv func(string) string) (*Config, error)
 - `<html data-theme>` — атрибут определяет тему (дефолт `light` в разметке,
   не завязан на JS).
 - Sticky-шапка 58px: brand-mark, название, слот `actions`, тумблер темы.
+- Иконка настроек в шапке появляется только для администратора и только когда
+  маршруты настроек включены через settings-флаг в контексте запроса.
 - `<head>`: Google Fonts (Source Serif 4 + Onest), `/static/css/app.css`, htmx.
 - Инлайн-скрипт (до first paint) читает `localStorage` и проставляет
   `data-theme` на `<html>` — анти-FOUC без вспышки дефолтной темы.
@@ -777,8 +779,9 @@ config.Load → coreclient.New → db.New + db.Migrate → dbAdapter → auth.Ne
 и единственный экземпляр `*db.LectureDB` разделяются между всеми адаптерами.
 
 **`web.NewRouter`** принимает вариативные опции — `web.WithGlobalMiddleware` и
-`web.WithMount`. Пакет `internal/web` не зависит от `internal/auth`; сервисы
-инъектируются через опции:
+`web.WithMount`. Пакет `internal/web` остаётся presentation/router layer:
+layout импортирует `internal/auth` только для `auth.IsAdminFromContext` в
+`web.NewLayoutData`, а доменные сервисы по-прежнему инъектируются через опции:
 
 ```go
 web.NewRouter(
@@ -806,7 +809,9 @@ web.NewRouter(
 
 Когда в ветке присутствует сервис настроек, маршруты `/settings*` должны
 монтироваться отдельной защищённой группой под `RequireAuth -> RequireAdmin`;
-под bare `RequireAuth` их монтировать нельзя.
+под bare `RequireAuth` их монтировать нельзя. Иконка настроек в layout
+показывается только при `IsAdmin` и settings-флаге, который сервер выставляет
+через `web.WithSettingsAvailable(ctx)` после подключения этих маршрутов.
 
 **Адрес** задаётся через `PLATFORM_ADDR` (дефолт `:8080`).
 

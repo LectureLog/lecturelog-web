@@ -17,14 +17,17 @@ type LayoutData struct {
 	CSRFToken string
 	// IsAdmin — признак администратора для отображения ссылок админки.
 	IsAdmin bool
+	// SettingsAvailable — признак доступности settings-маршрутов в текущем сервере.
+	SettingsAvailable bool
 }
 
 // NewLayoutData собирает данные layout из контекста запроса.
 func NewLayoutData(ctx context.Context, title string) LayoutData {
 	return LayoutData{
-		Title:     title,
-		CSRFToken: CSRFTokenFromContext(ctx),
-		IsAdmin:   auth.IsAdminFromContext(ctx),
+		Title:             title,
+		CSRFToken:         CSRFTokenFromContext(ctx),
+		IsAdmin:           auth.IsAdminFromContext(ctx),
+		SettingsAvailable: SettingsAvailableFromContext(ctx),
 	}
 }
 
@@ -85,7 +88,7 @@ templ header(data LayoutData, actions templ.Component) {
 				if actions != nil {
 					@actions
 				}
-				if data.IsAdmin {
+				if data.IsAdmin && data.SettingsAvailable {
 					@adminGearLink()
 				}
 				@themeToggle()

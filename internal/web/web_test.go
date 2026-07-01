@@ -126,11 +126,11 @@ func TestLayout_ThemeToggle(t *testing.T) {
 	}
 }
 
-func TestLayout_AdminGearVisibleForAdmin(t *testing.T) {
-	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true})
+func TestLayout_AdminGearVisibleForAdminWithSettingsAvailable(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true, SettingsAvailable: true})
 
 	if !strings.Contains(html, `href="/settings"`) {
-		t.Fatal("для админа ожидается ссылка на /settings")
+		t.Fatal("для админа при доступных настройках ожидается ссылка на /settings")
 	}
 	if !strings.Contains(html, `aria-label="Настройки"`) {
 		t.Fatal("ожидается aria-label для ссылки настроек")
@@ -140,11 +140,19 @@ func TestLayout_AdminGearVisibleForAdmin(t *testing.T) {
 	}
 }
 
-func TestLayout_AdminGearHiddenForNonAdmin(t *testing.T) {
-	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: false})
+func TestLayout_AdminGearHiddenForAdminWithoutSettings(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true})
 
 	if strings.Contains(html, `href="/settings"`) {
-		t.Fatal("для не-админа ссылка на /settings не должна рендериться")
+		t.Fatal("для админа без доступного settings-роута ссылка на /settings не должна рендериться")
+	}
+}
+
+func TestLayout_AdminGearHiddenForNonAdminWithSettingsAvailable(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: false, SettingsAvailable: true})
+
+	if strings.Contains(html, `href="/settings"`) {
+		t.Fatal("для не-админа ссылка на /settings не должна рендериться даже при доступных настройках")
 	}
 }
 
@@ -161,6 +169,19 @@ func TestNewLayoutData_DefaultsToContextValues(t *testing.T) {
 	}
 	if data.IsAdmin {
 		t.Fatal("IsAdmin должен быть false без admin-флага в контексте")
+	}
+	if data.SettingsAvailable {
+		t.Fatal("SettingsAvailable должен быть false без settings-флага в контексте")
+	}
+}
+
+func TestNewLayoutData_ReadsSettingsAvailableFromContext(t *testing.T) {
+	ctx := web.WithSettingsAvailable(context.Background())
+
+	data := web.NewLayoutData(ctx, "Тест")
+
+	if !data.SettingsAvailable {
+		t.Fatal("SettingsAvailable должен быть true при settings-флаге в контексте")
 	}
 }
 
