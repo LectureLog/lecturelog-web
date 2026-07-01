@@ -1254,7 +1254,7 @@ Run:
 
 ```bash
 go test ./cmd/server ./internal/auth -v
-go test ./... 
+go test ./...
 ```
 
 Expected: PASS.
