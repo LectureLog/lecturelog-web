@@ -451,7 +451,7 @@ settingsSvc := settings.NewService(coreClient)
 settingsSvc.Mount(ar) // GET /settings, GET /settings/cookies/status, POST /settings/cookies
 ```
 
-> ⚠️ **[граница с планом ролей — согласовано] Mount-блоком `/settings` владеет ПЛАН РОЛЕЙ, не этот план.** По договорённости (`2026-06-30-roles-admin-gate-design.md`, раздел F) `/settings*` монтируется ОДИН раз — под `RequireAuth` → `RequireAdmin` — и это делает план ролей. Cookies-UI лишь **регистрирует свои роуты внутри уже защищённой группы** через `settingsSvc.Mount(ar)`. Почему: cookies в ядре — глобальный singleton, под голым `RequireAuth` любой залогиненный по прямому URL `/settings` перезатёр бы cookies всем. `RequireAdmin`: обычный запрос → 302 `/lectures`, htmx → `HX-Redirect: /lectures`.
+> ⚠️ **[граница с планом ролей — согласовано] Mount-блоком `/settings` владеет ПЛАН РОЛЕЙ, не этот план.** По договорённости (`2026-06-30-roles-admin-gate-design.md`, раздел F) `/settings*` монтируется ОДИН раз — под `RequireAuth` → `RequireAdmin` — и это делает план ролей. Cookies-UI лишь **регистрирует свои роуты внутри уже защищённой группы** через `settingsSvc.Mount(ar)`. При этом после подключения реальных `/settings*` routes сервер должен включить глобальный settings-флаг (`web.WithSettingsAvailable(ctx)`), иначе шестерёнка останется скрытой. Почему: cookies в ядре — глобальный singleton, под голым `RequireAuth` любой залогиненный по прямому URL `/settings` перезатёр бы cookies всем. `RequireAdmin`: обычный запрос → 302 `/lectures`, htmx → `HX-Redirect: /lectures`.
 >
 > - Если план ролей УЖЕ реализован — НЕ дублируй mount; добавь только `settingsSvc.Mount(ar)` в его группу `/settings*`:
 >   ```go
@@ -484,12 +484,17 @@ git commit -m "feat(web): подключение сервиса настроек
 
 > ⚠️ Исходная формулировка задачи была основана на НЕВЕРНОМ допущении. Проверено в коде: **навигационного меню между разделами в `layout.templ` НЕТ.** Шапка (`header`, `layout.templ:61`) = brand + слот `actions` + `themeToggle`. Ссылок на `/lectures`/`/upload` в layout нет — они зашиты внутри страниц (`page_hub.templ`, `page_lectures.templ`), а `/lectures` и `/upload` передают `actions=nil`. Так что «добавить пункт рядом с /lectures в layout» невозможно — такого места не существует.
 
-**Решение (из грилла, проектируется планом ролей `2026-06-30-roles-admin-gate-design.md`):** вход на `/settings` — иконка-шестерёнка в правой части шапки (`ll-top-actions`, рядом с `themeToggle`), рендерится в `header` ТОЛЬКО если `data.IsAdmin`. Это требует поля `LayoutData.IsAdmin` и его проброса во все рендерящие Layout хендлеры — то есть инфраструктуру, которую вводит план ролей.
+**Решение (из грилла, проектируется планом ролей `2026-06-30-roles-admin-gate-design.md`):** вход на `/settings` — иконка-шестерёнка в правой части шапки (`ll-top-actions`, рядом с `themeToggle`), рендерится в `header` ТОЛЬКО если `data.IsAdmin && data.SettingsAvailable`. Это требует поля `LayoutData.IsAdmin`, settings-флага и их проброса во все рендерящие Layout хендлеры — то есть инфраструктуру, которую вводит план ролей.
+
+Актуализация после review: в roles-ветке без cookies-UI реального `/settings` ещё нет, поэтому
+шестерёнка рендерится только при `data.IsAdmin && data.SettingsAvailable`. Когда Task 5
+монтирует реальные `/settings*` routes под `RequireAuth -> RequireAdmin`, `cmd/server` должен
+включить settings-флаг глобальным middleware через `web.WithSettingsAvailable(ctx)`.
 
 **Поэтому:**
 - Если план ролей УЖЕ реализован — добавь в `header` (`layout.templ`) условный блок:
   ```go
-  if data.IsAdmin {
+  if data.IsAdmin && data.SettingsAvailable {
       @settingsLink() // иконка-шестерёнка → href="/settings"
   }
   ```
@@ -539,7 +544,7 @@ git commit -m "feat(web): вход в настройки (шестерёнка) 
 
 ### 2. ✅ РЕШЕНО (грилл 2026-06-30) — место и видимость «Настроек»
 
-Решено: cookies — глобальная настройка ядра, страница `/settings` видна/доступна ТОЛЬКО админу. Вход — иконка-шестерёнка в шапке (`ll-top-actions`), рендерится только при `data.IsAdmin`. Навигационного меню в layout сейчас нет (проверено) — шестерёнка добавляется планом ролей вместе с `LayoutData.IsAdmin`. Серверный гейт — `RequireAdmin` (Task 5), скрытие ссылки — UX поверх. Подробности — `2026-06-30-roles-admin-gate-design.md`. См. Task 5 и Task 6 (оба помечены `[зависит от плана ролей]`).
+Решено: cookies — глобальная настройка ядра, страница `/settings` видна/доступна ТОЛЬКО админу. Вход — иконка-шестерёнка в шапке (`ll-top-actions`), рендерится только при `data.IsAdmin && data.SettingsAvailable`. Навигационного меню в layout сейчас нет (проверено) — шестерёнка добавляется планом ролей вместе с `LayoutData.IsAdmin` и settings-флагом. Серверный гейт — `RequireAdmin` (Task 5), скрытие ссылки — UX поверх. Подробности — `2026-06-30-roles-admin-gate-design.md`. См. Task 5 и Task 6 (оба помечены `[зависит от плана ролей]`).
 
 ### 3. Обработка и показ ошибок ядра
 

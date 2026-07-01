@@ -17,6 +17,10 @@
 - Email canonicalization is `strings.TrimSpace` + `strings.ToLower`; do not add Gmail-specific rules.
 - Migration `004_normalize_user_emails.sql` cannot restore original case/spacing on down migration. Use a documented no-op down section.
 - `web.NewLayoutData` imports `internal/auth`. This is acceptable if `auth` still does not import `web`; verify with `go test ./internal/web ./internal/auth`.
+- The admin settings gear must not point at an unmounted `/settings` route. `LayoutData`
+  carries both `IsAdmin` and `SettingsAvailable`; the gear renders only when both are true.
+  The cookies-UI merge must set the settings flag globally when real settings routes are
+  mounted.
 - Code comments in snippets below are in Russian. Do not add any generated-author attribution to comments, commits, or PR text.
 
 ## Task 1: Parse `ADMIN_EMAILS` In Config
@@ -935,11 +939,11 @@ func renderLayoutWithData(t *testing.T, data web.LayoutData) string {
 Add tests:
 
 ```go
-func TestLayout_AdminGearVisibleForAdmin(t *testing.T) {
-	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true})
+func TestLayout_AdminGearVisibleForAdminWithSettingsAvailable(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true, SettingsAvailable: true})
 
 	if !strings.Contains(html, `href="/settings"`) {
-		t.Fatal("для админа ожидается ссылка на /settings")
+		t.Fatal("для админа при доступных настройках ожидается ссылка на /settings")
 	}
 	if !strings.Contains(html, `aria-label="Настройки"`) {
 		t.Fatal("ожидается aria-label для ссылки настроек")
@@ -949,11 +953,19 @@ func TestLayout_AdminGearVisibleForAdmin(t *testing.T) {
 	}
 }
 
-func TestLayout_AdminGearHiddenForNonAdmin(t *testing.T) {
-	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: false})
+func TestLayout_AdminGearHiddenForAdminWithoutSettings(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: true})
 
 	if strings.Contains(html, `href="/settings"`) {
-		t.Fatal("для не-админа ссылка на /settings не должна рендериться")
+		t.Fatal("для админа без доступного settings-роута ссылка на /settings не должна рендериться")
+	}
+}
+
+func TestLayout_AdminGearHiddenForNonAdminWithSettingsAvailable(t *testing.T) {
+	html := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAdmin: false, SettingsAvailable: true})
+
+	if strings.Contains(html, `href="/settings"`) {
+		t.Fatal("для не-админа ссылка на /settings не должна рендериться даже при доступных настройках")
 	}
 }
 
@@ -970,6 +982,19 @@ func TestNewLayoutData_DefaultsToContextValues(t *testing.T) {
 	}
 	if data.IsAdmin {
 		t.Fatal("IsAdmin должен быть false без admin-флага в контексте")
+	}
+	if data.SettingsAvailable {
+		t.Fatal("SettingsAvailable должен быть false без settings-флага в контексте")
+	}
+}
+
+func TestNewLayoutData_ReadsSettingsAvailableFromContext(t *testing.T) {
+	ctx := web.WithSettingsAvailable(context.Background())
+
+	data := web.NewLayoutData(ctx, "Тест")
+
+	if !data.SettingsAvailable {
+		t.Fatal("SettingsAvailable должен быть true при settings-флаге в контексте")
 	}
 }
 ```
@@ -999,16 +1024,19 @@ import (
 )
 ```
 
-- Add `IsAdmin bool` to `LayoutData`.
+- Add `IsAdmin bool` and `SettingsAvailable bool` to `LayoutData`.
+- Add `internal/web/settings.go` with `WithSettingsAvailable(ctx)` and
+  `SettingsAvailableFromContext(ctx) bool`; default is false.
 - Add:
 
 ```go
 // NewLayoutData собирает данные layout из контекста запроса.
 func NewLayoutData(ctx context.Context, title string) LayoutData {
 	return LayoutData{
-		Title:     title,
-		CSRFToken: CSRFTokenFromContext(ctx),
-		IsAdmin:   auth.IsAdminFromContext(ctx),
+		Title:             title,
+		CSRFToken:         CSRFTokenFromContext(ctx),
+		IsAdmin:           auth.IsAdminFromContext(ctx),
+		SettingsAvailable: SettingsAvailableFromContext(ctx),
 	}
 }
 ```
@@ -1016,7 +1044,7 @@ func NewLayoutData(ctx context.Context, title string) LayoutData {
 - In `header`, before `@themeToggle()`:
 
 ```templ
-if data.IsAdmin {
+if data.IsAdmin && data.SettingsAvailable {
 	@adminGearLink()
 }
 ```
@@ -1203,6 +1231,20 @@ web.WithMount(func(r chi.Router) {
 ```
 
 Place this block outside the general authenticated lecture/upload group, or inside it only if the final route chain is still exactly `RequireAuth -> RequireAdmin -> settingsSvc.Mount`. Do not mount `/settings` under bare `RequireAuth`.
+
+Also add a global middleware when the real settings service exists, so every layout-rendering
+page can show the admin gear without hard-coding route knowledge in each handler:
+
+```go
+settingsAvailable := func(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r.WithContext(web.WithSettingsAvailable(r.Context())))
+	})
+}
+```
+
+Mount it in `web.WithGlobalMiddleware` after `authSvc.LoadAdmin` and before CSRF. Do not add
+this middleware until real `/settings*` routes are mounted; otherwise the UI links to a 404.
 
 If `internal/settings` does not exist, do not create placeholder routes. Record in the final implementation notes that the merge with cookies-UI must add the protected mount above before shipping settings.
 
@@ -1461,8 +1503,9 @@ Expected: clean except for intentional uncommitted work if the user asked not to
 - `auth.resolveUser` canonicalizes verified email before repository calls and rejects empty canonical email.
 - Migration 004 normalizes existing `users.email`, fails on empty canonical email, fails on duplicate canonical email.
 - `auth.Service` supports `WithAdminEmails`, `LoadAdmin`, `RequireAdmin`, and `IsAdminFromContext`.
-- `web.NewLayoutData(ctx, title)` fills `Title`, `CSRFToken`, and `IsAdmin`.
-- Admin gear link renders only for `LayoutData.IsAdmin=true`.
+- `web.NewLayoutData(ctx, title)` fills `Title`, `CSRFToken`, `IsAdmin`, and
+  `SettingsAvailable`.
+- Admin gear link renders only for `LayoutData.IsAdmin=true && LayoutData.SettingsAvailable=true`.
 - Reader, lecture, hub, upload, and settings page if present use `web.NewLayoutData`.
 - `cmd/server` passes `cfg.AdminEmails`, warns when empty, mounts `LoadAdmin` after `LoadSession`, and protects real `/settings*` routes with `RequireAuth -> RequireAdmin`.
 - `cookies_invalid` maps to `Cookies YouTube устарели — обратитесь к администратору` in both packages without role branching.

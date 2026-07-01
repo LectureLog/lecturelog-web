@@ -29,7 +29,7 @@ singleton** (одна строка на всё ядро, не per-user). Стр�
 | A0. Email-identity | Админство НЕ завязано на Google/provider/sub/domain. Только `auth.User.Email`, нормализация `trim + lower`, без Gmail-specific правил. Будущие провайдеры должны давать verified email. |
 | A1. Миграция email | Добавить миграцию канонизации существующих `users.email`. Перед `UPDATE` проверить пустые/дубли после `lower(trim(email))`; при конфликте миграция падает с понятной ошибкой. Ролей в БД всё ещё нет. |
 | B. RequireAdmin | Серверный middleware на группе `/settings*`. Аноним на боевом mount идёт через `RequireAuth`; залогиненный не-админ: обычный запрос → 302 `/lectures`; htmx → `HX-Redirect: /lectures` (200). Не дыра — настоящий серверный гейт. |
-| C. Проброс в шаблоны | Хелпер `web.NewLayoutData(ctx, title)` тянет CSRFToken + IsAdmin из контекста (убивает footgun). Вход в админ-раздел — иконка-шестерёнка в шапке, видна только админу, на всех страницах с валидной сессией. |
+| C. Проброс в шаблоны | Хелпер `web.NewLayoutData(ctx, title)` тянет CSRFToken + IsAdmin + SettingsAvailable из контекста (убивает footgun). Вход в админ-раздел — иконка-шестерёнка в шапке, видна только админу и только когда реальные `/settings*` routes смонтированы. |
 | D. cookies_invalid | Карточки лекций НЕ ветвим по роли. Единый нейтральный текст для всех: **«Cookies YouTube устарели — обратитесь к администратору»**. Сигнатура `mapErrorCode` НЕ меняется. |
 | E. Проактивный сигнал | Out of scope (MVP). Возраст cookies виден через `updated_at` на `/settings` (это даёт план cookies-UI). Активный пуш/баннер — не делаем. |
 | F. Граница задач | План ролей владеет механизмом + строкой `cookies_invalid` + финальным монтированием `/settings*` под RequireAuth+RequireAdmin. RequireAuth-only `/settings` допустим только локально в рабочей ветке, не в `dev`. |
@@ -165,19 +165,31 @@ false для анонима (user=nil); сравнение нечувствит�
 
 **Хелпер `web.NewLayoutData(ctx context.Context, title string) LayoutData`:**
 - Внутри: `CSRFToken: web.CSRFTokenFromContext(ctx)`, `IsAdmin: auth.IsAdminFromContext(ctx)`,
-  `Title: title`.
+  `SettingsAvailable: web.SettingsAvailableFromContext(ctx)`, `Title: title`.
 - ⚠️ Зависимость направления импорта: `web` импортирует `auth` для `IsAdminFromContext`.
   Проверить, что нет цикла `auth → web`. Если цикл есть — IsAdmin прокидывать через
   отдельный геттер в `web` (свой `web.IsAdminFromContext`, который middleware из auth
   наполняет) ИЛИ хелпер положить в пакет, который импортирует оба. Решить на этапе
   реализации; цикла быть не должно (auth сейчас не импортирует web).
 
-**`LayoutData` (`internal/web/layout.templ:6`):** добавить поле `IsAdmin bool`.
+**`LayoutData` (`internal/web/layout.templ:6`):**
+- добавить поле `IsAdmin bool`;
+- добавить поле `SettingsAvailable bool`, чтобы roles-ветка без cookies-UI не показывала
+  админу битую ссылку на несмонтированный `/settings`.
+
+**Settings-флаг (`internal/web/settings.go`):**
+- `web.WithSettingsAvailable(ctx)` кладёт в контекст признак, что реальные settings routes
+  смонтированы в этом сервере;
+- `web.SettingsAvailableFromContext(ctx) bool` возвращает false по умолчанию.
+- Когда cookies-UI добавит `internal/settings` и защищённый mount `/settings*`, `cmd/server`
+  должен выставлять этот флаг глобальным middleware для всех страниц, чтобы шестерёнка была
+  видна админу на `/hub`, `/read/{id}`, `/lectures`, `/upload`.
 
 **`header` (`layout.templ:61`):** в `ll-top-actions`, ПЕРЕД `@themeToggle()`, добавить
-`if data.IsAdmin { @adminGearLink() }` — иконка-шестерёнка `<a href="/settings">` в стиле
-`ll-icon-btn` (как themeToggle). Иконку шестерёнки добавить рядом с `iconMoon`/`iconSun`.
-Ссылка должна иметь `aria-label="Настройки"` и `title="Настройки"`.
+`if data.IsAdmin && data.SettingsAvailable { @adminGearLink() }` — иконка-шестерёнка
+`<a href="/settings">` в стиле `ll-icon-btn` (как themeToggle). Иконку шестерёнки добавить
+рядом с `iconMoon`/`iconSun`. Ссылка должна иметь `aria-label="Настройки"` и
+`title="Настройки"`.
 
 **Все 5 call-site Layout переводятся на `NewLayoutData(ctx, title)`** (grep подтверждён):
 1. `internal/reader/handlers.go:47` (`/read/{id}`, доступен анонимам — IsAdmin корректно false).
@@ -192,10 +204,11 @@ false для анонима (user=nil); сравнение нечувствит�
 Статический `page_demo.templ:6` не трогаем (нет хендлера/контекста).
 
 **Замечание по публичным страницам:** `/hub` и `/read/{id}` доступны анонимам, но если запрос
-пришёл с валидной сессией админа, шестерёнка должна показываться и там. Для гостя и не-админа
-`IsAdminFromContext` вернёт false.
+пришёл с валидной сессией админа и settings routes включены, шестерёнка должна показываться и
+там. Для гостя, не-админа или сервера без settings routes ссылка скрыта.
 
-**Тесты:** рендер Layout с IsAdmin=true содержит ссылку на `/settings`; с IsAdmin=false — нет.
+**Тесты:** рендер Layout с `IsAdmin=true && SettingsAvailable=true` содержит ссылку на
+`/settings`; с `IsAdmin=false` или `SettingsAvailable=false` — нет.
 
 ---
 
@@ -255,7 +268,8 @@ YouTube-лекцию с текстом из D. На `/settings` виден во�
 **отменяются/делегируются** этому плану. Конкретно:
 - Task 5 cookies-UI: убрать монтирование под голым RequireAuth — `/settings` монтирует план
   ролей под RequireAuth+RequireAdmin. Cookies-UI лишь регистрирует свои роуты внутри этой
-  группы (`settingsSvc.Mount`).
+  группы (`settingsSvc.Mount`) и включает глобальный settings-флаг через
+  `web.WithSettingsAvailable`, чтобы шестерёнка начала рендериться.
 - Task 6 cookies-UI (ссылка «Настройки» в navbar) — заменяется шестерёнкой из плана ролей.
 - При создании `page_settings.templ` cookies-UI использует `web.NewLayoutData` (а не
   ручной `LayoutData{}`).
