@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -20,6 +21,8 @@ type mockCore struct {
 	lastUploadFilename string
 	lastTaskForm       map[string]string
 	lastTaskCT         string
+	lastCookieCT       string
+	lastCookieBody     []byte
 }
 
 func newMockCore(t *testing.T) *mockCore {
@@ -112,6 +115,31 @@ func newMockCore(t *testing.T) *mockCore {
 			})
 		case http.MethodDelete:
 			// 204 без тела; контракт идемпотентен (повторный DELETE тоже 204).
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			http.Error(w, "method", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// GET/PUT/DELETE /api/v1/youtube/cookies.
+	mux.HandleFunc("/api/v1/youtube/cookies", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			writeJSON(w, http.StatusOK, CookieStatusResponse{Exists: true, Size: 120})
+		case http.MethodPut:
+			m.lastCookieCT = r.Header.Get("Content-Type")
+			if err := r.ParseMultipartForm(1 << 20); err != nil {
+				http.Error(w, "bad multipart", http.StatusBadRequest)
+				return
+			}
+			f, _, err := r.FormFile("file")
+			if err != nil {
+				http.Error(w, "no file", http.StatusBadRequest)
+				return
+			}
+			m.lastCookieBody, _ = io.ReadAll(f)
+			writeJSON(w, http.StatusOK, CookieStatusResponse{Exists: true, Size: len(m.lastCookieBody)})
+		case http.MethodDelete:
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			http.Error(w, "method", http.StatusMethodNotAllowed)

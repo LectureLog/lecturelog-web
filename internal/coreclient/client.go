@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"mime/multipart"
+	"net/http"
 	"strconv"
+	"time"
 )
 
 // ErrTaskNotFound возвращается, когда ядро отвечает 404 на запрос статуса задачи.
@@ -14,6 +16,12 @@ var ErrTaskNotFound = errors.New("coreclient: задача не найдена")
 
 // ErrResultURLEmpty возвращается, когда ядро вернуло успешный ответ без ссылки на результат.
 var ErrResultURLEmpty = errors.New("coreclient: ядро вернуло пустую ссылку результата")
+
+// ErrCookiesBadFormat — ядро отклонило cookies из-за неверного формата (400).
+var ErrCookiesBadFormat = errors.New("coreclient: cookies отклонены: неверный формат")
+
+// ErrCookiesTooLarge — ядро отклонило cookies из-за размера (413).
+var ErrCookiesTooLarge = errors.New("coreclient: cookies слишком большие")
 
 // UploadResult — доменный результат presigned-PUT (POST /uploads).
 type UploadResult struct {
@@ -180,4 +188,80 @@ func (c *CoreClient) DeleteTask(ctx context.Context, taskID string) error {
 		return nil
 	}
 	return fmt.Errorf("coreclient: неожиданный код от ядра на удалении: %d", resp.StatusCode())
+}
+
+// CookieStatus — доменный статус YouTube-cookies в ядре (без содержимого).
+type CookieStatus struct {
+	Exists    bool
+	Size      int
+	UpdatedAt string // RFC3339 или пусто
+}
+
+// GetYouTubeCookieStatus запрашивает статус cookies (GET /youtube/cookies).
+func (c *CoreClient) GetYouTubeCookieStatus(ctx context.Context) (CookieStatus, error) {
+	resp, err := c.api.GetYoutubeCookiesApiV1YoutubeCookiesGetWithResponse(ctx)
+	if err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: статус cookies: %w", err)
+	}
+	if resp.JSON200 != nil {
+		return cookieStatusFrom(resp.JSON200), nil
+	}
+	return CookieStatus{}, fmt.Errorf("coreclient: неожиданный код на статус cookies: %d", resp.StatusCode())
+}
+
+// PutYouTubeCookies загружает cookies.txt в ядро multipart-запросом (поле file).
+// Тело собирается вручную (multipart), но отправляется через сгенерированный
+// …WithBodyWithResponse — ровно как CreateTask, без сырого http.
+func (c *CoreClient) PutYouTubeCookies(ctx context.Context, content []byte) (CookieStatus, error) {
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	fw, err := mw.CreateFormFile("file", "cookies.txt")
+	if err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: multipart cookies: %w", err)
+	}
+	if _, err := fw.Write(content); err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: запись cookies: %w", err)
+	}
+	if err := mw.Close(); err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: закрытие multipart: %w", err)
+	}
+
+	resp, err := c.api.PutYoutubeCookiesApiV1YoutubeCookiesPutWithBodyWithResponse(
+		ctx, mw.FormDataContentType(), &buf,
+	)
+	if err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: загрузка cookies: %w", err)
+	}
+	if resp.JSON200 != nil {
+		return cookieStatusFrom(resp.JSON200), nil
+	}
+	switch resp.StatusCode() {
+	case http.StatusBadRequest, http.StatusUnprocessableEntity:
+		return CookieStatus{}, ErrCookiesBadFormat
+	case http.StatusRequestEntityTooLarge:
+		return CookieStatus{}, ErrCookiesTooLarge
+	}
+	return CookieStatus{}, fmt.Errorf("coreclient: неожиданный код на загрузку cookies: %d", resp.StatusCode())
+}
+
+// DeleteYouTubeCookies удаляет cookies из ядра (DELETE /youtube/cookies).
+// Ядро отдаёт 204 без тела — возвращаем пустой статус (exists=false).
+func (c *CoreClient) DeleteYouTubeCookies(ctx context.Context) (CookieStatus, error) {
+	resp, err := c.api.DeleteYoutubeCookiesApiV1YoutubeCookiesDeleteWithResponse(ctx)
+	if err != nil {
+		return CookieStatus{}, fmt.Errorf("coreclient: удаление cookies: %w", err)
+	}
+	if resp.StatusCode() == http.StatusNoContent || resp.StatusCode() == http.StatusOK {
+		return CookieStatus{Exists: false}, nil
+	}
+	return CookieStatus{}, fmt.Errorf("coreclient: неожиданный код на удаление cookies: %d", resp.StatusCode())
+}
+
+// cookieStatusFrom маппит сгенерированную схему в доменный CookieStatus.
+func cookieStatusFrom(r *CookieStatusResponse) CookieStatus {
+	s := CookieStatus{Exists: r.Exists, Size: r.Size}
+	if r.UpdatedAt != nil {
+		s.UpdatedAt = r.UpdatedAt.Format(time.RFC3339)
+	}
+	return s
 }
