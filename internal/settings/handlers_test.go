@@ -7,6 +7,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -166,9 +167,10 @@ func TestHandleUpload_NoFile(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /settings/cookies без файла = %d, want 400, body: %s", rec.Code, rec.Body.String())
-	}
+	// Статус ошибки — HTML-фрагмент #cookie-status со статусом 200 (не 400):
+	// hx-swap="outerHTML" на форме, а htmx по умолчанию не свапает тело
+	// ответа с кодом 4xx/5xx — стилизованный errnote иначе не показать.
+	assertCookieErrorFragment(t, rec, "Выберите файл")
 	if core.putCalled {
 		t.Error("PutYouTubeCookies не должен вызываться без файла")
 	}
@@ -184,12 +186,7 @@ func TestHandleUpload_BadFormat(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadRequest {
-		t.Fatalf("POST /settings/cookies (bad format) = %d, want 400, body: %s", rec.Code, rec.Body.String())
-	}
-	if !bytes.Contains(rec.Body.Bytes(), []byte("формат")) {
-		t.Errorf("тело ответа должно упоминать формат: %q", rec.Body.String())
-	}
+	assertCookieErrorFragment(t, rec, "формат")
 }
 
 func TestHandleUpload_TooLarge(t *testing.T) {
@@ -202,9 +199,7 @@ func TestHandleUpload_TooLarge(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusRequestEntityTooLarge {
-		t.Fatalf("POST /settings/cookies (too large) = %d, want 413, body: %s", rec.Code, rec.Body.String())
-	}
+	assertCookieErrorFragment(t, rec, "большой")
 }
 
 func TestHandleDelete_Success(t *testing.T) {
@@ -231,8 +226,26 @@ func TestHandleDelete_CoreUnavailable(t *testing.T) {
 	rec := httptest.NewRecorder()
 	handler.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusBadGateway {
-		t.Fatalf("DELETE /settings/cookies (core down) = %d, want 502, body: %s", rec.Code, rec.Body.String())
+	assertCookieErrorFragment(t, rec, "недоступно")
+}
+
+// assertCookieErrorFragment проверяет, что тело ответа — стилизованный
+// errnote (web.CookieStatusError): статус 200 (htmx свапнет фрагмент),
+// корневой узел #cookie-status с классом ошибки и текст сообщения.
+func assertCookieErrorFragment(t *testing.T, rec *httptest.ResponseRecorder, wantSubstr string) {
+	t.Helper()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("код ответа при ошибке cookies = %d, want 200 (htmx не свапает 4xx/5xx), body: %s", rec.Code, rec.Body.String())
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `id="cookie-status"`) {
+		t.Errorf("тело ответа должно содержать корень #cookie-status: %q", body)
+	}
+	if !strings.Contains(body, "ll-settings-status--error") {
+		t.Errorf("тело ответа должно содержать класс ошибки ll-settings-status--error: %q", body)
+	}
+	if !strings.Contains(body, wantSubstr) {
+		t.Errorf("тело ответа должно содержать %q: %q", wantSubstr, body)
 	}
 }
 
