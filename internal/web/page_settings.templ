@@ -89,6 +89,10 @@ templ CookieStatusFragment(st coreclient.CookieStatus) {
 				<div class="ll-settings-status-title">Cookies загружены</div>
 				<div class="ll-settings-status-meta">{ cookieMeta(st) }</div>
 			</div>
+			// Токен берём из контекста (CSRFTokenFromContext), а не из data.CSRFToken:
+			// этот фрагмент рендерится и автономно — при htmx-свапе после
+			// upload/delete, без LayoutData. Токен в контекст кладёт csrfInjector,
+			// поэтому он доступен через ctx в обоих случаях рендера.
 			<button
 				class="ll-settings-delete"
 				hx-delete="/settings/cookies"
@@ -125,7 +129,7 @@ templ CookieStatusError(message string) {
 }
 
 // cookieMeta форматирует мета-строку статуса: дата (если есть) и размер.
-// Дата — абсолютная, "02 Jan 2006" (RFC3339 → человеческий формат).
+// Дата — абсолютная, "2 Jan 2006" (RFC3339 → человеческий формат).
 func cookieMeta(st coreclient.CookieStatus) string {
 	size := formatCookieSize(st.Size)
 	date := formatCookieDate(st.UpdatedAt)
@@ -135,7 +139,8 @@ func cookieMeta(st coreclient.CookieStatus) string {
 	return fmt.Sprintf("Обновлены %s · %s", date, size)
 }
 
-// formatCookieDate парсит RFC3339 и форматирует "02 Jan 2006". Пустая/некорректная
+// formatCookieDate парсит RFC3339 и форматирует "2 Jan 2006" (без ведущего нуля,
+// консистентно с internal/lecture/handlers.go). Пустая/некорректная
 // строка → пустой результат (мета покажет только размер).
 func formatCookieDate(updatedAt string) string {
 	if updatedAt == "" {
@@ -145,7 +150,7 @@ func formatCookieDate(updatedAt string) string {
 	if err != nil {
 		return ""
 	}
-	return t.Format("02 Jan 2006")
+	return t.Format("2 Jan 2006")
 }
 
 // formatCookieSize форматирует размер файла: КБ при <1МБ (округление вверх), иначе МБ.

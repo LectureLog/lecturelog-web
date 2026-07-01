@@ -676,14 +676,19 @@ func TestCookieStatusFragment_Exists(t *testing.T) {
 	html := renderCookieStatusFragment(t, coreclient.CookieStatus{
 		Exists:    true,
 		Size:      120,
-		UpdatedAt: "2026-06-29T10:00:00Z",
+		UpdatedAt: "2026-06-05T10:00:00Z",
 	})
 
 	if !strings.Contains(html, "загружены") {
 		t.Error("ожидается текст «загружены» при Exists=true")
 	}
-	if !strings.Contains(html, "29 Jun 2026") {
-		t.Errorf("ожидается дата в формате «02 Jan 2006» (29 Jun 2026): %s", html)
+	// День 5 (однозначное число) отличает формат "2 Jan 2006" от "02 Jan 2006":
+	// со старым форматом (с ведущим нулём) тест бы ловил "05 Jun 2026" и падал здесь.
+	if !strings.Contains(html, "5 Jun 2026") {
+		t.Errorf("ожидается дата в формате «2 Jan 2006» (5 Jun 2026, без ведущего нуля): %s", html)
+	}
+	if strings.Contains(html, "05 Jun 2026") {
+		t.Errorf("дата не должна содержать ведущий ноль (05 Jun 2026): %s", html)
 	}
 	if !strings.Contains(html, `id="cookie-status"`) {
 		t.Error("ожидается корневой узел #cookie-status")

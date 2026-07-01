@@ -9,9 +9,10 @@ import (
 )
 
 // writeMessage отдаёт короткое текстовое сообщение с нужным статусом
-// (по образцу internal/reader/handlers.go:88). Используется ТОЛЬКО для
-// ответов вне htmx-свапа фрагмента статуса (сейчас — 401 «требуется
-// авторизация», который отдаётся раньше, чем запрос долетает до htmx-таргета).
+// (по образцу internal/reader/handlers.go:88). Используется для не-htmx
+// текстовых ответов — сейчас это 401 «требуется авторизация» во всех
+// хендлерах settings: он отдаётся раньше, чем запрос долетает до
+// htmx-таргета #cookie-status, поэтому стилизованный errnote тут не нужен.
 func writeMessage(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.WriteHeader(status)

@@ -136,6 +136,17 @@ func TestHandleStatus_Anonymous(t *testing.T) {
 	}
 }
 
+func TestHandleStatus_CoreUnavailable(t *testing.T) {
+	core := &fakeCore{statusErr: errors.New("core down")}
+	handler := mountTestRouter(NewService(core))
+
+	req := addSessionCookie(httptest.NewRequest(http.MethodGet, "/settings/cookies/status", nil))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	assertCookieErrorFragment(t, rec, "недоступно")
+}
+
 func TestHandleUpload_Success(t *testing.T) {
 	core := &fakeCore{}
 	handler := mountTestRouter(NewService(core))

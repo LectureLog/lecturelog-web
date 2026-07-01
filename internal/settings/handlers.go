@@ -27,7 +27,7 @@ func (s *Service) Mount(r chi.Router) {
 // не роняем 502 всей страницей.
 func (s *Service) handlePage(w http.ResponseWriter, r *http.Request) {
 	if auth.UserFromContext(r.Context()) == nil {
-		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		writeMessage(w, http.StatusUnauthorized, "требуется авторизация")
 		return
 	}
 	st, err := s.core.GetYouTubeCookieStatus(r.Context())
@@ -40,11 +40,12 @@ func (s *Service) handlePage(w http.ResponseWriter, r *http.Request) {
 // handleStatus отдаёт htmx-фрагмент статуса (для свапа после действий).
 func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 	if auth.UserFromContext(r.Context()) == nil {
-		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		writeMessage(w, http.StatusUnauthorized, "требуется авторизация")
 		return
 	}
 	st, err := s.core.GetYouTubeCookieStatus(r.Context())
 	if err != nil {
+		log.Printf("settings: core error: %v", err)
 		writeCookieError(w, r, "Ядро недоступно, попробуйте позже")
 		return
 	}
@@ -55,7 +56,7 @@ func (s *Service) handleStatus(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleUpload(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
-		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		writeMessage(w, http.StatusUnauthorized, "требуется авторизация")
 		return
 	}
 	if err := r.ParseMultipartForm(maxCookieBytes); err != nil {
@@ -79,6 +80,7 @@ func (s *Service) handleUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	st, err := s.core.PutYouTubeCookies(r.Context(), content)
 	if err != nil {
+		log.Printf("settings: core error: %v", err)
 		writeCoreError(w, r, err)
 		return
 	}
@@ -91,11 +93,12 @@ func (s *Service) handleUpload(w http.ResponseWriter, r *http.Request) {
 func (s *Service) handleDelete(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
-		http.Error(w, "требуется авторизация", http.StatusUnauthorized)
+		writeMessage(w, http.StatusUnauthorized, "требуется авторизация")
 		return
 	}
 	st, err := s.core.DeleteYouTubeCookies(r.Context())
 	if err != nil {
+		log.Printf("settings: core error: %v", err)
 		writeCookieError(w, r, "Ядро недоступно, попробуйте позже")
 		return
 	}

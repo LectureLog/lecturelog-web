@@ -195,14 +195,14 @@ func CookieStatusFragment(st coreclient.CookieStatus) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></div><button class=\"ll-settings-delete\" hx-delete=\"/settings/cookies\" hx-target=\"#cookie-status\" hx-swap=\"outerHTML\" hx-confirm=\"Удалить сохранённые YouTube-cookies? Загрузка приватных и возрастных видео перестанет работать.\" hx-headers=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</div></div>    <button class=\"ll-settings-delete\" hx-delete=\"/settings/cookies\" hx-target=\"#cookie-status\" hx-swap=\"outerHTML\" hx-confirm=\"Удалить сохранённые YouTube-cookies? Загрузка приватных и возрастных видео перестанет работать.\" hx-headers=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.ResolveAttributeValue(`{"X-CSRF-Token":"` + CSRFTokenFromContext(ctx) + `"}`)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page_settings.templ`, Line: 98, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `page_settings.templ`, Line: 102, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ_7745c5c3_Var7)
 			if templ_7745c5c3_Err != nil {
@@ -272,7 +272,7 @@ func CookieStatusError(message string) templ.Component {
 		var templ_7745c5c3_Var9 string
 		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page_settings.templ`, Line: 122, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `page_settings.templ`, Line: 126, Col: 50}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
@@ -287,7 +287,7 @@ func CookieStatusError(message string) templ.Component {
 }
 
 // cookieMeta форматирует мета-строку статуса: дата (если есть) и размер.
-// Дата — абсолютная, "02 Jan 2006" (RFC3339 → человеческий формат).
+// Дата — абсолютная, "2 Jan 2006" (RFC3339 → человеческий формат).
 func cookieMeta(st coreclient.CookieStatus) string {
 	size := formatCookieSize(st.Size)
 	date := formatCookieDate(st.UpdatedAt)
@@ -297,7 +297,8 @@ func cookieMeta(st coreclient.CookieStatus) string {
 	return fmt.Sprintf("Обновлены %s · %s", date, size)
 }
 
-// formatCookieDate парсит RFC3339 и форматирует "02 Jan 2006". Пустая/некорректная
+// formatCookieDate парсит RFC3339 и форматирует "2 Jan 2006" (без ведущего нуля,
+// консистентно с internal/lecture/handlers.go). Пустая/некорректная
 // строка → пустой результат (мета покажет только размер).
 func formatCookieDate(updatedAt string) string {
 	if updatedAt == "" {
@@ -307,7 +308,7 @@ func formatCookieDate(updatedAt string) string {
 	if err != nil {
 		return ""
 	}
-	return t.Format("02 Jan 2006")
+	return t.Format("2 Jan 2006")
 }
 
 // formatCookieSize форматирует размер файла: КБ при <1МБ (округление вверх), иначе МБ.
