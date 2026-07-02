@@ -78,6 +78,9 @@ func (h *Handlers) writeLoadError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrNotReady):
 		writeMessage(w, http.StatusAccepted, "Лекция ещё обрабатывается")
 	case errors.Is(err, ErrCoreUnavailable):
+		// Логируем причину: молчаливое проглатывание уже раз скрыло
+		// расхождение ключа structure.json с реальным путём выхода core.
+		log.Printf("reader: core unavailable: %v", err)
 		writeMessage(w, http.StatusBadGateway, "Результат обработки временно недоступен, попробуйте позже")
 	default:
 		log.Printf("reader: request: %v", err)

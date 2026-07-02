@@ -108,7 +108,7 @@ func TestServiceLoadBuildsView(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if store.key != "results/task-1/structure.json" {
+	if store.key != "results/task-1/output/structure.json" {
 		t.Errorf("GetObject key = %q", store.key)
 	}
 	if !view.IsOwner || view.Title != "Моя лекция" || view.Duration != 3600 {

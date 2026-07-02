@@ -12,7 +12,9 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 		return ReaderView{}, err
 	}
 
-	structureKey := "results/" + lecture.CoreTaskID + "/structure.json"
+	// Ядро кладёт выход задачи под results/<taskID>/output/ (см. контракт пути
+	// выхода core). Сегмент output/ обязателен, иначе GetObject вернёт NoSuchKey.
+	structureKey := "results/" + lecture.CoreTaskID + "/output/structure.json"
 	b, err := s.store.GetObject(ctx, structureKey)
 	if err != nil {
 		return ReaderView{}, fmt.Errorf("%w: прочитать structure.json: %v", ErrCoreUnavailable, err)
