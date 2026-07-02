@@ -75,11 +75,19 @@ func NewRouter(opts ...Option) http.Handler {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(sfs)))
 
-	// Демо-страница: рендерит базовый layout для проверки работоспособности.
-	// C1 заменит этот маршрут доменными страницами.
+	// Корень ведёт на витрину: отдельной главной нет — витрина публичных
+	// лекций и есть лицо сервиса.
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		http.Redirect(w, req, "/hub", http.StatusFound)
+	})
+
+	// Стилизованная 404 вместо голого текста chi. Глобальные middleware
+	// применяются и к NotFound-хендлеру, поэтому шапка отражает сессию.
+	r.NotFound(func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := DemoPage().Render(req.Context(), w); err != nil {
+		w.WriteHeader(http.StatusNotFound)
+		data := NewLayoutData(req.Context(), "Страница не найдена")
+		if err := NotFoundPage(data).Render(req.Context(), w); err != nil {
 			http.Error(w, "ошибка рендера", http.StatusInternalServerError)
 		}
 	})

@@ -1,5 +1,7 @@
 package web
 
+import "fmt"
+
 // HubCardVM — view-модель карточки публичной лекции витрины.
 type HubCardVM struct {
 	ID              string
@@ -13,9 +15,20 @@ type HubCardVM struct {
 }
 
 // HubPage — публичная витрина лекций.
+// Анонимному посетителю сверху показывается hero-блок (витрина = лендинг),
+// авторизованному — компактная шапка страницы.
 templ HubPage(data LayoutData, vms []HubCardVM, authed bool) {
-	@Layout(data, hubTopActions(authed)) {
+	@Layout(withNav(data, "hub"), nil) {
+		if !authed {
+			@hubHero()
+		}
 		<section class="ll-lectures-section">
+			<div class="ll-section-head">
+				<h2 class="ll-section-title">Публичные лекции</h2>
+				if len(vms) > 0 {
+					<span class="ll-section-count">{ fmt.Sprintf("%d", len(vms)) }</span>
+				}
+			</div>
 			if len(vms) == 0 {
 				@HubEmpty()
 			} else {
@@ -29,11 +42,45 @@ templ HubPage(data LayoutData, vms []HubCardVM, authed bool) {
 	}
 }
 
+// hubHero — лендинг-блок витрины для анонимного посетителя:
+// кикер, крупный serif-заголовок, лид, CTA и три шага «как это работает».
+templ hubHero() {
+	<section class="ll-hero">
+		<p class="ll-hero-kicker">Читальный зал</p>
+		<h1 class="ll-hero-title">Запись лекции — в конспект, который удобно читать</h1>
+		<p class="ll-hero-dek">Загрузите аудио или видео: LectureLog расшифрует речь, разобьёт материал по темам и соберёт структурированный конспект с тайм-кодами и слайдами.</p>
+		<div class="ll-hero-cta">
+			<a class="ll-btn ll-btn--accent ll-btn--lg" href="/auth/login">Войти и загрузить лекцию</a>
+			<span class="ll-hero-note">Часовая лекция — конспект за ~5 минут</span>
+		</div>
+		<ol class="ll-hero-steps">
+			<li class="ll-hero-step">
+				<span class="ll-hero-step-num">01</span>
+				<strong class="ll-hero-step-title">Загрузите запись</strong>
+				<p class="ll-hero-step-text">Аудио, видео или ссылка на YouTube — до 2 ГБ.</p>
+			</li>
+			<li class="ll-hero-step">
+				<span class="ll-hero-step-num">02</span>
+				<strong class="ll-hero-step-title">Дождитесь обработки</strong>
+				<p class="ll-hero-step-text">Распознаем речь, выделим темы, достанем слайды из видео.</p>
+			</li>
+			<li class="ll-hero-step">
+				<span class="ll-hero-step-num">03</span>
+				<strong class="ll-hero-step-title">Читайте и делитесь</strong>
+				<p class="ll-hero-step-text">Конспект с тайм-кодами — в читалке, с поиском и экспортом.</p>
+			</li>
+		</ol>
+	</section>
+}
+
 // HubCard — карточка публичной лекции со ссылкой в читалку.
 templ HubCard(vm HubCardVM) {
 	<a class="ll-lec-card ll-hub-card" href={ vm.ReadURL }>
 		<div class="ll-lec-card-top">
 			<span class="ll-badge ll-badge--muted">{ vm.SourceLabel }</span>
+			<span class="ll-hub-card-arrow" aria-hidden="true">
+				@iconArrowRight()
+			</span>
 		</div>
 		<div class="ll-lec-card-body">
 			<h3 class="ll-lec-title">{ vm.Title }</h3>
@@ -42,8 +89,10 @@ templ HubCard(vm HubCardVM) {
 			<span class="ll-hub-author">
 				if vm.AuthorAvatarURL != "" {
 					<img class="ll-hub-avatar" src={ vm.AuthorAvatarURL } alt=""/>
+				} else {
+					<span class="ll-hub-avatar ll-hub-avatar--ph" aria-hidden="true">{ authorInitial(vm.AuthorName) }</span>
 				}
-				<span>{ vm.AuthorName }</span>
+				<span class="ll-hub-author-name">{ vm.AuthorName }</span>
 			</span>
 			<span class="ll-lec-meta">{ vm.PublishedAt }</span>
 		</div>
@@ -61,11 +110,19 @@ templ HubEmpty() {
 	</div>
 }
 
-// hubTopActions выбирает действие в шапке для авторизованного и анонимного посетителя.
-templ hubTopActions(authed bool) {
-	if authed {
-		<a href="/lectures" class="ll-btn">Мои лекции</a>
-	} else {
-		<a href="/auth/login" class="ll-btn">Войти</a>
+// authorInitial возвращает первую букву имени автора для аватара-заглушки.
+// Пустое имя → «?», юникод-безопасно (первая руна, не байт).
+func authorInitial(name string) string {
+	for _, r := range name {
+		return string(r)
 	}
+	return "?"
+}
+
+// iconArrowRight — стрелка «в читалку» на карточке витрины (видна на hover).
+templ iconArrowRight() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M5 12h14"></path>
+		<path d="m13 6 6 6-6 6"></path>
+	</svg>
 }

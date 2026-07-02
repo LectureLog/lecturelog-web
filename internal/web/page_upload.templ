@@ -3,7 +3,7 @@ package web
 // UploadPage — страница загрузки новой лекции.
 // Файл-режим обрабатывается upload.js, URL-режим отправляется через htmx.
 templ UploadPage(data LayoutData) {
-	@Layout(data, nil) {
+	@Layout(withNav(data, "upload"), nil) {
 		<section id="ll-upload" class="ll-upload" data-csrf={ data.CSRFToken }>
 			<div class="ll-upload-head">
 				<div class="ll-upload-kicker">Загрузка лекции</div>

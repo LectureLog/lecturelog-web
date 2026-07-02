@@ -63,12 +63,13 @@ func TestLayout_DocType(t *testing.T) {
 	}
 }
 
-// TestLayout_Title проверяет что заголовок вкладки совпадает с LayoutData.Title.
+// TestLayout_Title проверяет что заголовок вкладки строится из LayoutData.Title
+// с суффиксом бренда (docTitle).
 func TestLayout_Title(t *testing.T) {
 	html := renderLayout(t, "ЛекчурЛог")
 
-	if !strings.Contains(html, "<title>ЛекчурЛог</title>") {
-		t.Error("ожидается <title>ЛекчурЛог</title>")
+	if !strings.Contains(html, "<title>ЛекчурЛог · LectureLog</title>") {
+		t.Error("ожидается <title>ЛекчурЛог · LectureLog</title>")
 	}
 }
 
@@ -210,22 +211,37 @@ func TestLayout_HtmxHeaders(t *testing.T) {
 	}
 }
 
-// TestRouter_DemoPage проверяет GET / через httptest.
-func TestRouter_DemoPage(t *testing.T) {
+// TestRouter_RootRedirect проверяет, что корень ведёт на витрину.
+func TestRouter_RootRedirect(t *testing.T) {
 	router := web.NewRouter()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusOK {
-		t.Errorf("GET / = %d, ожидается 200", rec.Code)
+	if rec.Code != http.StatusFound {
+		t.Errorf("GET / = %d, ожидается 302", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/hub" {
+		t.Errorf("GET / Location = %q, ожидается /hub", loc)
+	}
+}
+
+// TestRouter_NotFound проверяет стилизованную 404 вместо голого текста chi.
+func TestRouter_NotFound(t *testing.T) {
+	router := web.NewRouter()
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/no-such-page", nil)
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("GET /no-such-page = %d, ожидается 404", rec.Code)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, `data-theme`) {
-		t.Error("GET / должен содержать data-theme в ответе")
-	}
 	if !strings.Contains(body, "ll-topbar") {
-		t.Error("GET / должен содержать шапку ll-topbar")
+		t.Error("404 должна рендериться в общем каркасе (ll-topbar)")
+	}
+	if !strings.Contains(body, "404") {
+		t.Error("404 должна показывать код ошибки")
 	}
 }
 
@@ -311,12 +327,12 @@ func TestRouter_ExistingRoutesUnchanged(t *testing.T) {
 		}),
 	)
 
-	// GET / должен по-прежнему работать
+	// GET / должен по-прежнему работать (редирект на витрину)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("GET / с опциями = %d, ожидается 200", rec.Code)
+	if rec.Code != http.StatusFound {
+		t.Errorf("GET / с опциями = %d, ожидается 302", rec.Code)
 	}
 
 	// Статика должна работать

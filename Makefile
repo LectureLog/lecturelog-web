@@ -65,6 +65,11 @@ down:
 dev: up
 	go run ./cmd/server
 
+# Дизайн-превью: все страницы web-слоя с фиктивными данными, без БД/ядра/OAuth.
+# http://localhost:8901 (см. cmd/preview/main.go).
+preview:
+	go run ./cmd/preview
+
 # Горячая перезагрузка Go-кода. Если air не установлен, запускается через go run
 # без добавления инструмента разработки в go.mod. templ и CSS генерируются вручную.
 watch:

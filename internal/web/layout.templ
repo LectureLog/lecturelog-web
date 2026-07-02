@@ -15,10 +15,15 @@ type LayoutData struct {
 	// Пустой токен → hx-headers="{}" (совместимость с существующими тестами).
 	// Заполняется в main через csrf-инжектор (§7 плана).
 	CSRFToken string
+	// IsAuthed — признак аутентифицированного пользователя (навигация, выход).
+	IsAuthed bool
 	// IsAdmin — признак администратора для отображения ссылок админки.
 	IsAdmin bool
 	// SettingsAvailable — признак доступности settings-маршрутов в текущем сервере.
 	SettingsAvailable bool
+	// Active — ключ активного пункта навигации: hub|lectures|upload|"" (см. navLink).
+	// Страницы выставляют его сами через withNav — обработчикам знать не нужно.
+	Active string
 }
 
 // NewLayoutData собирает данные layout из контекста запроса.
@@ -26,9 +31,18 @@ func NewLayoutData(ctx context.Context, title string) LayoutData {
 	return LayoutData{
 		Title:             title,
 		CSRFToken:         CSRFTokenFromContext(ctx),
+		IsAuthed:          auth.UserFromContext(ctx) != nil,
 		IsAdmin:           auth.IsAdminFromContext(ctx),
 		SettingsAvailable: SettingsAvailableFromContext(ctx),
 	}
+}
+
+// withNav возвращает копию LayoutData с активным пунктом навигации.
+// Вызывается страницами при передаче данных в Layout: страница сама знает,
+// какому пункту меню она соответствует.
+func withNav(data LayoutData, active string) LayoutData {
+	data.Active = active
+	return data
 }
 
 // csrfHeaders формирует JSON-строку для hx-headers.
@@ -41,6 +55,15 @@ func csrfHeaders(token string) string {
 	return fmt.Sprintf(`{"X-CSRF-Token":%q}`, token)
 }
 
+// docTitle формирует заголовок вкладки: «Страница · LectureLog».
+// Для пустого заголовка — просто «LectureLog».
+func docTitle(title string) string {
+	if title == "" || title == "LectureLog" {
+		return "LectureLog"
+	}
+	return title + " · LectureLog"
+}
+
 // Layout — базовый каркас «Читальный зал».
 // actions — опциональный слот действий в правой части шапки (nil → только тумблер темы).
 templ Layout(data LayoutData, actions templ.Component) {
@@ -49,6 +72,7 @@ templ Layout(data LayoutData, actions templ.Component) {
 		<head>
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="description" content="LectureLog — конспекты лекций с тайм-кодами: загрузите запись, получите структурированный конспект со слайдами."/>
 			<!-- Инлайн-скрипт темы: читает localStorage до first paint, устраняет FOUC -->
 			<script>
 				(function(){
@@ -58,13 +82,14 @@ templ Layout(data LayoutData, actions templ.Component) {
 					}
 				})();
 			</script>
+			<link rel="icon" type="image/svg+xml" href="/static/favicon.svg"/>
 			<!-- Google Fonts: Source Serif 4 (контент) + Onest (интерфейс) -->
 			<link rel="preconnect" href="https://fonts.googleapis.com"/>
 			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 			<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;0,8..60,700;1,8..60,400;1,8..60,500;1,8..60,600&family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 			<link rel="stylesheet" href="/static/css/app.css"/>
 			<script src="/static/vendor/htmx.min.js" defer></script>
-			<title>{ data.Title }</title>
+			<title>{ docTitle(data.Title) }</title>
 		</head>
 		<!-- hx-headers: пустой токен → {}; с токеном → {"X-CSRF-Token":"..."} -->
 		<body hx-headers={ csrfHeaders(data.CSRFToken) }>
@@ -72,29 +97,58 @@ templ Layout(data LayoutData, actions templ.Component) {
 			<main class="ll-main">
 				{ children... }
 			</main>
+			@footer()
 		</body>
 	</html>
 }
 
-// header — sticky-шапка 58px: brand-mark слева, actions+тумблер справа.
+// header — sticky-шапка 58px: бренд + навигация слева, actions+сервис справа.
 templ header(data LayoutData, actions templ.Component) {
 	<header class="ll-topbar">
 		<div class="ll-topbar-inner">
-			<div class="ll-brand">
+			<a class="ll-brand" href="/hub" aria-label="LectureLog — на главную">
 				@brandMark()
-				<span class="ll-brand-t">{ data.Title }</span>
-			</div>
+				<span class="ll-brand-t">LectureLog</span>
+			</a>
+			@topNav(data)
 			<div class="ll-top-actions">
 				if actions != nil {
 					@actions
+				}
+				if !data.IsAuthed {
+					<a href="/auth/login" class="ll-btn ll-btn--login">Войти</a>
 				}
 				if data.IsAdmin && data.SettingsAvailable {
 					@adminGearLink()
 				}
 				@themeToggle()
+				if data.IsAuthed {
+					@logoutButton(data.CSRFToken)
+				}
 			</div>
 		</div>
 	</header>
+}
+
+// topNav — основная навигация в шапке. Пункты «Мои лекции» и «Загрузить»
+// видны только аутентифицированным пользователям.
+templ topNav(data LayoutData) {
+	<nav class="ll-nav" aria-label="Основная навигация">
+		@navLink("/hub", "Витрина", data.Active == "hub")
+		if data.IsAuthed {
+			@navLink("/lectures", "Мои лекции", data.Active == "lectures")
+			@navLink("/upload", "Загрузить", data.Active == "upload")
+		}
+	</nav>
+}
+
+// navLink — пункт навигации с подчёркиванием активного состояния.
+templ navLink(href, label string, active bool) {
+	if active {
+		<a class="ll-nav-link ll-nav-link--active" href={ href } aria-current="page">{ label }</a>
+	} else {
+		<a class="ll-nav-link" href={ href }>{ label }</a>
+	}
 }
 
 // themeToggle — кнопка переключения светлой/тёмной темы.
@@ -118,9 +172,44 @@ templ adminGearLink() {
 	</a>
 }
 
+// logoutButton — выход из аккаунта: обычная форма POST /auth/logout.
+// CSRF передаётся скрытым полем gorilla.csrf.Token (стандартное имя gorilla/csrf) —
+// без htmx, чтобы браузер честно ушёл по редиректу сервера.
+templ logoutButton(csrfToken string) {
+	<form class="ll-logout-form" method="post" action="/auth/logout">
+		<input type="hidden" name="gorilla.csrf.Token" value={ csrfToken }/>
+		<button class="ll-icon-btn" type="submit" aria-label="Выйти" title="Выйти">
+			@iconLogout()
+		</button>
+	</form>
+}
+
+// footer — нижний колонтитул: марка, слоган, тонкая линия сверху.
+templ footer() {
+	<footer class="ll-footer">
+		<div class="ll-footer-inner">
+			<div class="ll-footer-brand">
+				@brandMark()
+				<span>LectureLog</span>
+			</div>
+			<p class="ll-footer-tag">Конспекты лекций с тайм-кодами — загрузите запись, читайте конспект.</p>
+			<a class="ll-footer-link" href="/hub">Витрина публичных лекций</a>
+		</div>
+	</footer>
+}
+
 // brandMark — логотип-квадрат 24px цвета --accent с иконкой книги.
 templ brandMark() {
 	<span class="ll-brand-mark">
 		@iconBook()
 	</span>
+}
+
+// iconLogout — иконка выхода (дверь со стрелкой).
+templ iconLogout() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+		<path d="M16 17l5-5-5-5"></path>
+		<path d="M21 12H9"></path>
+	</svg>
 }
