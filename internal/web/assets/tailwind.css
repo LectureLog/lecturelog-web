@@ -70,7 +70,7 @@
   .ll-reader-progress > div { width: 0; height: 100%; background: var(--accent); transition: width .12s linear; }
   .ll-reader-export, .ll-reader-text-button { border: 1px solid var(--border); border-radius: var(--r-btn); background: var(--surface); color: var(--text-2); font: 600 13px var(--font-sans); text-decoration: none; cursor: pointer; padding: 8px 12px; }
   .ll-reader-export:hover, .ll-reader-text-button:hover { color: var(--ink); border-color: var(--border-2); }
-  .ll-reader-search { display: flex; align-items: center; gap: 8px; margin: -34px -22px 28px; padding: 10px max(22px, calc((100% - 1240px) / 2 + 22px)); border-bottom: 1px solid var(--border); background: var(--bg-2); }
+  .ll-reader-search { position: fixed; top: 66px; right: 22px; z-index: 70; display: flex; align-items: center; gap: 8px; width: min(480px, calc(100vw - 26px)); padding: 9px 10px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow); }
   .ll-reader-search-field { flex: 1; }
   .ll-reader-search input { width: 100%; padding: 10px 13px; border: 1px solid var(--border-2); border-radius: var(--r-btn); outline: none; background: var(--surface); color: var(--ink); font: 14px var(--font-sans); }
   .ll-reader-search input:focus { border-color: var(--accent); }
@@ -123,10 +123,10 @@
   .ll-reader-lightbox img { max-width: 100%; max-height: 90vh; border-radius: var(--r-slide); box-shadow: var(--shadow); }
   .ll-reader-lightbox-close { position: absolute; top: 22px; right: 22px; min-width: 40px; min-height: 40px; border: 1px solid var(--bg); border-radius: var(--r-btn); color: var(--bg); cursor: pointer; font-size: 28px; line-height: 1; }
   .ll-reader-lightbox-close:focus-visible { outline: 2px solid var(--bg); outline-offset: 3px; }
-  .ll-reader-prose mark { background: var(--mark); color: var(--ink); }
-  .ll-reader-prose mark.ll-reader-mark-current { background: var(--mark-cur); }
+  .ll-reader-prose mark { background: var(--mark); color: var(--ink); border-radius: 3px; padding: 0.05em 0.15em; margin: -0.05em -0.05em; box-decoration-break: clone; -webkit-box-decoration-break: clone; }
+  .ll-reader-prose mark.ll-reader-mark-current { background: var(--mark-cur); box-shadow: 0 0 0 2px var(--mark-cur); }
   @media (max-width: 880px) { .ll-reader-layout { display: block; } .ll-reader-sidebar { position: static; max-height: none; width: 100%; padding: 0; margin-bottom: 34px; } .ll-reader-article { width: 100%; } }
-  @media (max-width: 620px) { .ll-reader-search { margin-inline: -13px; padding-inline: 13px; } .ll-reader-search-count, .ll-reader-search .ll-reader-text-button { display: none; } .ll-reader-layout { gap: 0; } .ll-reader-timeline { padding-left: 26px; } .ll-reader-sub::before { left: -31px; } .ll-reader-doc-head h1 { font-size: 35px; } }
+  @media (max-width: 620px) { .ll-reader-search { right: 13px; } .ll-reader-search-count { display: none; } .ll-reader-layout { gap: 0; } .ll-reader-timeline { padding-left: 26px; } .ll-reader-sub::before { left: -31px; } .ll-reader-doc-head h1 { font-size: 35px; } }
 
   /* Шапка: sticky 58px, blur-фон, нижняя граница */
   .ll-topbar {
@@ -2540,5 +2540,27 @@
     font-size: 17px;
     font-style: italic;
     line-height: 1.66;
+  }
+}
+
+/* ─── Кнопка «Скопировать ссылку» (карточки и шапка ридера) ──────────────── */
+@layer components {
+  .ll-share .ll-share-icon,
+  .ll-share .ll-share-done {
+    display: inline-flex;
+  }
+
+  .ll-share .ll-share-done,
+  .ll-share--done .ll-share-icon {
+    display: none;
+  }
+
+  .ll-share--done .ll-share-done {
+    display: inline-flex;
+    color: var(--accent);
+  }
+
+  .ll-share--done {
+    background: var(--accent-soft);
   }
 }

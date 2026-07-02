@@ -211,6 +211,32 @@ func TestLayout_HtmxHeaders(t *testing.T) {
 	}
 }
 
+// TestVisibilityToggle_SendsTargetValue фиксирует контракт с handleSetVisibility:
+// тумблер обязан слать form-поле visibility с целевым (противоположным) значением —
+// без hx-vals публикация из UI молча не работает.
+func TestVisibilityToggle_SendsTargetValue(t *testing.T) {
+	render := func(vm web.LectureCardVM) string {
+		var b bytes.Buffer
+		if err := web.LectureCard(vm).Render(context.Background(), &b); err != nil {
+			t.Fatalf("LectureCard.Render: %v", err)
+		}
+		return b.String()
+	}
+
+	private := render(web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true})
+	if !strings.Contains(private, `{&#34;visibility&#34;:&#34;public&#34;}`) && !strings.Contains(private, `{"visibility":"public"}`) {
+		t.Errorf("личная лекция: hx-vals должен слать visibility=public, получено:\n%s", private)
+	}
+
+	public := render(web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true})
+	if !strings.Contains(public, `{&#34;visibility&#34;:&#34;private&#34;}`) && !strings.Contains(public, `{"visibility":"private"}`) {
+		t.Errorf("публичная лекция: hx-vals должен слать visibility=private, получено:\n%s", public)
+	}
+	if !strings.Contains(public, "ll-share") {
+		t.Error("публичная карточка должна содержать кнопку «Скопировать ссылку»")
+	}
+}
+
 // TestRouter_Landing проверяет лендинг на корневом маршруте.
 func TestRouter_Landing(t *testing.T) {
 	router := web.NewRouter()

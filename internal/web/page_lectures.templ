@@ -95,6 +95,9 @@ templ LectureCard(vm LectureCardVM) {
 		<div class="ll-lec-card-top">
 			<span class={ "ll-badge", sourceBadgeClass(vm.SourceKind) }>{ sourceLabel(vm.SourceKind) }</span>
 			<div class="ll-lec-card-actions">
+				if vm.Visibility == "public" {
+					@LectureShareButton(vm)
+				}
 				if vm.CanRetry {
 					<button
 						class="ll-icon-btn"
@@ -186,16 +189,42 @@ templ LectureTitleInline(vm LectureCardVM) {
 
 // LectureVisibilityToggle — тумблер переключения видимости лекции.
 // Для public-лекции disabled если статус не ready.
+// hx-vals обязателен: handleSetVisibility читает form-поле "visibility"
+// с целевым значением (без него публикация из UI не работает).
 templ LectureVisibilityToggle(vm LectureCardVM) {
 	<button
 		class={ "ll-toggle", visibilityToggleClass(vm) }
 		hx-post={ "/lectures/" + vm.ID + "/visibility" }
+		hx-vals={ visibilityVals(vm) }
+		hx-confirm={ visibilityConfirm(vm) }
 		hx-target={ "#lec-" + vm.ID }
 		hx-swap="outerHTML"
 		disabled?={ !vm.CanPublish && vm.Visibility != "public" }
 		aria-label={ visibilityLabel(vm) }
+		title={ visibilityLabel(vm) }
 	>
 		{ visibilityText(vm) }
+	</button>
+}
+
+// LectureShareButton — копирование публичной ссылки на читалку.
+// Абсолютный URL собирается в браузере (location.origin + путь),
+// подтверждение — сменой иконки на галочку (класс ll-share--done).
+templ LectureShareButton(vm LectureCardVM) {
+	<button
+		type="button"
+		class="ll-icon-btn ll-share"
+		data-path={ "/read/" + vm.ID }
+		aria-label="Скопировать ссылку на лекцию"
+		title="Скопировать ссылку"
+		onclick="var b=this;navigator.clipboard.writeText(location.origin+b.dataset.path).then(function(){b.classList.add('ll-share--done');setTimeout(function(){b.classList.remove('ll-share--done')},1600)})"
+	>
+		<span class="ll-share-icon">
+			@iconShare()
+		</span>
+		<span class="ll-share-done" aria-hidden="true">
+			@iconCheck()
+		</span>
 	</button>
 }
 
@@ -329,6 +358,31 @@ func visibilityText(vm LectureCardVM) string {
 		return "Публичная"
 	}
 	return "Личная"
+}
+
+// visibilityVals — JSON для hx-vals с целевым значением видимости
+// (противоположным текущему): его ждёт handleSetVisibility.
+func visibilityVals(vm LectureCardVM) string {
+	if vm.Visibility == "public" {
+		return `{"visibility":"private"}`
+	}
+	return `{"visibility":"public"}`
+}
+
+// visibilityConfirm — текст подтверждения переключения видимости.
+func visibilityConfirm(vm LectureCardVM) string {
+	if vm.Visibility == "public" {
+		return "Сделать лекцию личной? Она исчезнет из витрины, ссылка на чтение перестанет работать."
+	}
+	return "Опубликовать лекцию? Она появится в витрине, читать сможет любой по ссылке."
+}
+
+// iconShare — иконка «поделиться» (цепочка-ссылка).
+templ iconShare() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M10 13a5 5 0 0 0 7 0l2-2a5 5 0 0 0-7-7l-1 1"></path>
+		<path d="M14 11a5 5 0 0 0-7 0l-2 2a5 5 0 0 0 7 7l1-1"></path>
+	</svg>
 }
 
 // iconRetry — иконка повтора (стрелка по кругу).

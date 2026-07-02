@@ -110,14 +110,16 @@
     matchIndex = -1;
     searchCount.textContent = '';
   };
-  const goToMatch = (index) => {
+  // scroll=false — при наборе запроса: подсвечиваем и считаем, но не
+  // дёргаем страницу; скролл только по явной навигации (Enter/кнопки).
+  const goToMatch = (index, scroll = true) => {
     if (!matches.length) return;
     matchIndex = (index + matches.length) % matches.length;
     matches.forEach((mark) => mark.classList.remove('ll-reader-mark-current'));
     const match = matches[matchIndex];
     match.classList.add('ll-reader-mark-current');
     searchCount.textContent = `${matchIndex + 1} / ${matches.length}`;
-    window.scrollTo({ top: match.getBoundingClientRect().top + window.scrollY - 120, behavior: 'smooth' });
+    if (scroll) window.scrollTo({ top: match.getBoundingClientRect().top + window.scrollY - 120, behavior: 'smooth' });
   };
   const runSearch = (term) => {
     clearSearch();
@@ -145,7 +147,14 @@
       fragment.append(text.slice(offset));
       node.replaceWith(fragment);
     });
-    if (matches.length) goToMatch(0); else searchCount.textContent = 'нет совпадений';
+    if (matches.length) {
+      // Текущим становится первое совпадение в зоне видимости или ниже неё —
+      // читатель остаётся там, где читал, вместо прыжка в начало страницы.
+      const fromViewport = matches.findIndex((mark) => mark.getBoundingClientRect().top >= 90);
+      goToMatch(fromViewport === -1 ? 0 : fromViewport, false);
+    } else {
+      searchCount.textContent = 'нет совпадений';
+    }
   };
 
   searchButton.addEventListener('click', () => {

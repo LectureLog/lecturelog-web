@@ -136,6 +136,20 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 // ReaderActions — действия в правой части шапки читалки.
 templ ReaderActions(vm ReaderVM) {
 	<button type="button" class="ll-icon-btn" id="readerSearchButton" aria-label="Поиск по конспекту">⌕</button>
+	<button
+		type="button"
+		class="ll-icon-btn ll-share"
+		aria-label="Скопировать ссылку на конспект"
+		title="Скопировать ссылку"
+		onclick="var b=this;navigator.clipboard.writeText(location.origin+location.pathname).then(function(){b.classList.add('ll-share--done');setTimeout(function(){b.classList.remove('ll-share--done')},1600)})"
+	>
+		<span class="ll-share-icon">
+			@iconShare()
+		</span>
+		<span class="ll-share-done" aria-hidden="true">
+			@iconCheck()
+		</span>
+	</button>
 	<a class="ll-reader-export" href={ "/read/" + vm.LectureID + "/export" }>Экспорт</a>
 }
 
