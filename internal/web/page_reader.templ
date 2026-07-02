@@ -66,22 +66,29 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 						}
 					</div>
 					<div class="ll-reader-reading"><span>Прочитано</span><strong id="readerReadPercent">0%</strong><div><i id="readerReadBar"></i></div></div>
-					<nav class="ll-reader-toc">
-						<p>Содержание</p>
-						for _, section := range vm.Sections {
-							<div class="ll-reader-toc-section">
-								<div><span>{ section.Number }</span><strong>{ section.Title }</strong></div>
-								<ul>
-									for _, sub := range section.Subtopics {
-										<li><a class="ll-reader-toc-link" href={ "#" + readerSubID(sub.Number) } data-target={ readerSubID(sub.Number) }><span>{ sub.Number }</span>{ sub.Title }</a></li>
-									}
-								</ul>
-							</div>
-						}
-					</nav>
+					<details class="ll-reader-toc-box" id="readerTocBox" open>
+						<summary class="ll-reader-toc-summary">
+							<span>Содержание</span>
+							@iconChevronDown()
+						</summary>
+						<nav class="ll-reader-toc">
+							<p class="ll-reader-toc-label-desktop">Содержание</p>
+							for _, section := range vm.Sections {
+								<div class="ll-reader-toc-section">
+									<div><span>{ section.Number }</span><strong>{ section.Title }</strong></div>
+									<ul>
+										for _, sub := range section.Subtopics {
+											<li><a class="ll-reader-toc-link" href={ "#" + readerSubID(sub.Number) } data-target={ readerSubID(sub.Number) }><span>{ sub.Number }</span>{ sub.Title }</a></li>
+										}
+									</ul>
+								</div>
+							}
+						</nav>
+					</details>
 				</aside>
 				<article class="ll-reader-article" id="readerContent">
 					<header class="ll-reader-doc-head">
+						@readerBack(vm.IsOwner)
 						<p>Конспект лекции</p>
 						<h1>{ vm.Title }</h1>
 						<div>{ vm.SourceTitle } · { readerDurationLabel(vm.Duration) }</div>
@@ -100,8 +107,15 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 											// ContentHTML уже санитизирован goldmark в B2 (без unsafe-HTML) — Raw безопасен
 											@templ.Raw(sub.ContentHTML)
 										</div>
-										for _, slideURL := range sub.SlideURLs {
-											<figure class="ll-reader-slide"><img src={ slideURL } alt={ "Слайд: " + sub.Title } loading="lazy"/><figcaption>Открыть слайд</figcaption></figure>
+										if len(sub.SlideURLs) > 0 {
+											<div class={ "ll-reader-slides", templ.KV("ll-reader-slides--multi", len(sub.SlideURLs) > 1) }>
+												for slideIndex, slideURL := range sub.SlideURLs {
+													<figure class="ll-reader-slide">
+														<img src={ slideURL } alt={ fmt.Sprintf("Слайд %d: %s", slideIndex+1, sub.Title) } loading="lazy"/>
+														<figcaption>{ fmt.Sprintf("Слайд %d из %d", slideIndex+1, len(sub.SlideURLs)) }</figcaption>
+													</figure>
+												}
+											</div>
 										}
 									</section>
 								}
@@ -128,7 +142,7 @@ templ ReaderActions(vm ReaderVM) {
 // ReaderMedia — нативный медиа-плеер с временным диапазоном фрагмента.
 templ ReaderMedia(media ReaderMediaVM) {
 	<div class="ll-reader-player" data-start={ fmt.Sprintf("%d", media.Start) } data-end={ fmt.Sprintf("%d", media.End) }>
-		<div><span class="ll-reader-media-kind">{ readerSourceLabel(media.Kind) }</span><span>{ readerTimeRange(media.Start, media.End) }</span></div>
+		<div><span class="ll-reader-media-kind">{ readerSourceLabel(media.Kind) }</span><span title="Фрагмент исходной записи">{ readerTimeRange(media.Start, media.End) }</span></div>
 		if media.Kind == "video" {
 			<video preload="metadata" src={ media.URL } controls></video>
 		} else {
@@ -142,12 +156,39 @@ func readerSubID(number string) string {
 	return "s-" + strings.ReplaceAll(number, ".", "-")
 }
 
-// readerDurationLabel форматирует длительность в компактный вид.
+// readerBack — хлебная крошка «назад»: владельцу — в библиотеку,
+// посетителю — на витрину.
+templ readerBack(isOwner bool) {
+	if isOwner {
+		<a class="ll-reader-back" href="/lectures">← Мои лекции</a>
+	} else {
+		<a class="ll-reader-back" href="/hub">← Витрина</a>
+	}
+}
+
+// iconChevronDown — шеврон для сворачиваемого оглавления.
+templ iconChevronDown() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="m6 9 6 6 6-6"></path>
+	</svg>
+}
+
+// readerDurationLabel форматирует длительность в компактный вид,
+// включая часы для длинных записей: «1 ч 20 мин».
 func readerDurationLabel(seconds int) string {
 	if seconds < 60 {
 		return fmt.Sprintf("%d сек", seconds)
 	}
-	return fmt.Sprintf("%d мин", seconds/60)
+	minutes := seconds / 60
+	if minutes < 60 {
+		return fmt.Sprintf("%d мин", minutes)
+	}
+	hours := minutes / 60
+	rest := minutes % 60
+	if rest == 0 {
+		return fmt.Sprintf("%d ч", hours)
+	}
+	return fmt.Sprintf("%d ч %d мин", hours, rest)
 }
 
 // readerTimeRange форматирует границы медиафрагмента.

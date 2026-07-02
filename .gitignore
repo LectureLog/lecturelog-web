@@ -8,3 +8,4 @@
 
 # Нормализованная копия спеки — промежуточный артефакт генерации, не версионируем
 internal/coreclient/openapi.normalized.json
+.preview-data/

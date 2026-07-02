@@ -18,6 +18,9 @@ type options struct {
 	globalMiddleware []func(http.Handler) http.Handler
 	// mounts — функции монтирования дополнительных маршрутов (auth и др.).
 	mounts []func(chi.Router)
+	// landingLectures — источник свежих публичных лекций для лендинга «/».
+	// nil или пустой результат → секция примеров не показывается.
+	landingLectures func(r *http.Request) []HubCardVM
 }
 
 // Option — функциональная опция NewRouter.
@@ -38,6 +41,15 @@ func WithGlobalMiddleware(mw ...func(http.Handler) http.Handler) Option {
 func WithMount(fn func(chi.Router)) Option {
 	return func(o *options) {
 		o.mounts = append(o.mounts, fn)
+	}
+}
+
+// WithLandingLectures задаёт источник свежих публичных лекций для лендинга.
+// Передаётся замыканием из cmd/server (hub.Service), чтобы web не зависел
+// от доменных пакетов.
+func WithLandingLectures(fn func(r *http.Request) []HubCardVM) Option {
+	return func(o *options) {
+		o.landingLectures = fn
 	}
 }
 
@@ -75,11 +87,15 @@ func NewRouter(opts ...Option) http.Handler {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(sfs)))
 
-	// Главная — лендинг сервиса: что это, с чем работает, куда идти дальше.
+	// Главная — лендинг сервиса: hero, свежие публичные конспекты, форматы.
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		var examples []HubCardVM
+		if o.landingLectures != nil {
+			examples = o.landingLectures(req)
+		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		data := NewLayoutData(req.Context(), "LectureLog")
-		if err := LandingPage(data).Render(req.Context(), w); err != nil {
+		if err := LandingPage(data, examples).Render(req.Context(), w); err != nil {
 			http.Error(w, "ошибка рендера", http.StatusInternalServerError)
 		}
 	})

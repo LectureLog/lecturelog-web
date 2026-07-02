@@ -8,10 +8,10 @@ package web
 import "github.com/a-h/templ"
 import templruntime "github.com/a-h/templ/runtime"
 
-// LandingPage — главная страница «/»: лендинг сервиса с переходами
-// в витрину и личную библиотеку. Содержание отвечает на три вопроса:
-// что это, с чем умеет работать, что делать дальше.
-func LandingPage(data LayoutData) templ.Component {
+// LandingPage — главная страница «/»: короткий лендинг. Hero с главным
+// действием, свежие публичные конспекты (живая демонстрация результата),
+// компактный блок форматов. Промо не растягиваем: примеры говорят сами.
+func LandingPage(data LayoutData, examples []HubCardVM) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -52,11 +52,11 @@ func LandingPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = landingFormats().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = landingExamples(examples).Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = landingSteps().Render(ctx, templ_7745c5c3_Buffer)
+			templ_7745c5c3_Err = landingFormats().Render(ctx, templ_7745c5c3_Buffer)
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -123,8 +123,9 @@ func landingHero(authed bool) templ.Component {
 	})
 }
 
-// landingFormats — блок «С чем работаем»: форматы источников и опции.
-func landingFormats() templ.Component {
+// landingExamples — свежие публичные конспекты: результат сервиса вместо
+// длинных объяснений. Пустой список → секция не показывается.
+func landingExamples(examples []HubCardVM) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -145,40 +146,28 @@ func landingFormats() templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<section class=\"ll-land-section\"><h2 class=\"ll-land-title\">С чем умеем работать</h2><div class=\"ll-land-formats\"><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = iconAudioWave().Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</span> <strong>Аудиозаписи</strong><p>Диктофон или запись пары.</p><span class=\"ll-land-format-meta\">MP3 · WAV · M4A</span></div><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = iconUploadMedia().Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "</span> <strong>Видеозаписи</strong><p>Лекции, вебинары, доклады.</p><span class=\"ll-land-format-meta\">MP4 · MOV — до 2 ГБ</span></div><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = iconUploadLink().Render(ctx, templ_7745c5c3_Buffer)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span> <strong>Ссылки на YouTube</strong><p>Или прямой URL на файл записи — скачаем сами.</p><span class=\"ll-land-format-meta\">youtube.com · прямые ссылки</span></div></div><div class=\"ll-land-options\"><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>PDF с презентацией</strong><p>Приложите слайды отдельным файлом — вставим их в нужные темы конспекта.</p></div></div><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>Слайды из видео</strong><p>Если отдельной презентации нет — найдём кадры со слайдами прямо в записи.</p></div></div></div></section>")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
+		if len(examples) > 0 {
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<section class=\"ll-land-section\"><div class=\"ll-land-sec-head\"><h2 class=\"ll-land-title\">Свежие конспекты</h2><a class=\"ll-land-more\" href=\"/hub\">Вся витрина →</a></div><div class=\"ll-lec-grid\">")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+			for _, vm := range examples {
+				templ_7745c5c3_Err = HubCard(vm).Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+			}
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 8, "</div></section>")
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
 		}
 		return nil
 	})
 }
 
-// landingSteps — блок «Как это работает» без обещаний по времени.
-func landingSteps() templ.Component {
+// landingFormats — блок «С чем работаем»: форматы источников и опции.
+func landingFormats() templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -199,7 +188,31 @@ func landingSteps() templ.Component {
 			templ_7745c5c3_Var5 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "<section class=\"ll-land-section\"><h2 class=\"ll-land-title\">Как это работает</h2><ol class=\"ll-hero-steps ll-hero-steps--landing\"><li class=\"ll-hero-step\"><span class=\"ll-hero-step-num\">01</span> <strong class=\"ll-hero-step-title\">Загрузите запись</strong><p class=\"ll-hero-step-text\">Файл или ссылка — обработка идёт на сервере, страницу можно закрыть.</p></li><li class=\"ll-hero-step\"><span class=\"ll-hero-step-num\">02</span> <strong class=\"ll-hero-step-title\">Получите конспект</strong><p class=\"ll-hero-step-text\">Распознаем речь, разобьём на темы, привяжем тайм-коды, фрагменты записи и слайды.</p></li><li class=\"ll-hero-step\"><span class=\"ll-hero-step-num\">03</span> <strong class=\"ll-hero-step-title\">Читайте и делитесь</strong><p class=\"ll-hero-step-text\">Читалка с оглавлением и поиском, экспорт в Markdown, публикация в общую витрину.</p></li></ol></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<section class=\"ll-land-section\"><h2 class=\"ll-land-title\">С чем умеем работать</h2><div class=\"ll-land-formats\"><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = iconAudioWave().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "</span> <strong>Аудиозаписи</strong><p>Диктофон или запись пары.</p><span class=\"ll-land-format-meta\">MP3 · WAV · M4A</span></div><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = iconUploadMedia().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 11, "</span> <strong>Видеозаписи</strong><p>Лекции, вебинары, доклады.</p><span class=\"ll-land-format-meta\">MP4 · MOV — до 2 ГБ</span></div><div class=\"ll-land-format\"><span class=\"ll-land-format-icon\">")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = iconUploadLink().Render(ctx, templ_7745c5c3_Buffer)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> <strong>Ссылки на YouTube</strong><p>Или прямой URL на файл записи — скачаем сами.</p><span class=\"ll-land-format-meta\">youtube.com · прямые ссылки</span></div></div><div class=\"ll-land-options\"><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>PDF с презентацией</strong><p>Приложите слайды отдельным файлом — вставим их в нужные темы конспекта.</p></div></div><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>Слайды из видео</strong><p>Если отдельной презентации нет — найдём кадры со слайдами прямо в записи.</p></div></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -229,22 +242,22 @@ func landingFinal(authed bool) templ.Component {
 			templ_7745c5c3_Var6 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<section class=\"ll-land-final\"><h2 class=\"ll-land-final-title\">Попробуйте на своей лекции</h2>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<section class=\"ll-land-final\"><h2 class=\"ll-land-final-title\">Попробуйте на своей лекции</h2>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		if authed {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 13, "<a class=\"ll-btn ll-btn--accent ll-btn--lg\" href=\"/upload\">Загрузить лекцию</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<a class=\"ll-btn ll-btn--accent ll-btn--lg\" href=\"/upload\">Загрузить лекцию</a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		} else {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "<a class=\"ll-btn ll-btn--accent ll-btn--lg\" href=\"/auth/login\">Войти и загрузить</a> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<a class=\"ll-btn ll-btn--accent ll-btn--lg\" href=\"/auth/login\">Войти и загрузить</a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<a class=\"ll-land-final-link\" href=\"/hub\">Сначала посмотреть готовые конспекты →</a></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "</section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -274,7 +287,7 @@ func iconAudioWave() templ.Component {
 			templ_7745c5c3_Var7 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 16, "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 12h2\"></path> <path d=\"M6 8v8\"></path> <path d=\"M10 5v14\"></path> <path d=\"M14 8v8\"></path> <path d=\"M18 10v4\"></path> <path d=\"M22 12h-2\"></path></svg>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<svg viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><path d=\"M2 12h2\"></path> <path d=\"M6 8v8\"></path> <path d=\"M10 5v14\"></path> <path d=\"M14 8v8\"></path> <path d=\"M18 10v4\"></path> <path d=\"M22 12h-2\"></path></svg>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

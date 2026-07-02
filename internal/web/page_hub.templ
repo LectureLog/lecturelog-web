@@ -27,9 +27,6 @@ templ HubPage(data LayoutData, vms []HubCardVM) {
 						<p class="ll-page-sub">{ publicCount(len(vms)) } — открыты всем, читайте без входа</p>
 					}
 				</div>
-				if !data.IsAuthed {
-					<a href="/" class="ll-btn ll-page-head-cta">Что такое LectureLog?</a>
-				}
 			</div>
 			if len(vms) == 0 {
 				@HubEmpty()

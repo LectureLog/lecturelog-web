@@ -1,14 +1,14 @@
 package web
 
-// LandingPage — главная страница «/»: лендинг сервиса с переходами
-// в витрину и личную библиотеку. Содержание отвечает на три вопроса:
-// что это, с чем умеет работать, что делать дальше.
-templ LandingPage(data LayoutData) {
+// LandingPage — главная страница «/»: короткий лендинг. Hero с главным
+// действием, свежие публичные конспекты (живая демонстрация результата),
+// компактный блок форматов. Промо не растягиваем: примеры говорят сами.
+templ LandingPage(data LayoutData, examples []HubCardVM) {
 	@Layout(data, nil) {
 		<div class="ll-landing">
 			@landingHero(data.IsAuthed)
+			@landingExamples(examples)
 			@landingFormats()
-			@landingSteps()
 			@landingFinal(data.IsAuthed)
 		</div>
 	}
@@ -30,6 +30,24 @@ templ landingHero(authed bool) {
 			}
 		</div>
 	</section>
+}
+
+// landingExamples — свежие публичные конспекты: результат сервиса вместо
+// длинных объяснений. Пустой список → секция не показывается.
+templ landingExamples(examples []HubCardVM) {
+	if len(examples) > 0 {
+		<section class="ll-land-section">
+			<div class="ll-land-sec-head">
+				<h2 class="ll-land-title">Свежие конспекты</h2>
+				<a class="ll-land-more" href="/hub">Вся витрина →</a>
+			</div>
+			<div class="ll-lec-grid">
+				for _, vm := range examples {
+					@HubCard(vm)
+				}
+			</div>
+		</section>
+	}
 }
 
 // landingFormats — блок «С чем работаем»: форматы источников и опции.
@@ -81,30 +99,6 @@ templ landingFormats() {
 	</section>
 }
 
-// landingSteps — блок «Как это работает» без обещаний по времени.
-templ landingSteps() {
-	<section class="ll-land-section">
-		<h2 class="ll-land-title">Как это работает</h2>
-		<ol class="ll-hero-steps ll-hero-steps--landing">
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">01</span>
-				<strong class="ll-hero-step-title">Загрузите запись</strong>
-				<p class="ll-hero-step-text">Файл или ссылка — обработка идёт на сервере, страницу можно закрыть.</p>
-			</li>
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">02</span>
-				<strong class="ll-hero-step-title">Получите конспект</strong>
-				<p class="ll-hero-step-text">Распознаем речь, разобьём на темы, привяжем тайм-коды, фрагменты записи и слайды.</p>
-			</li>
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">03</span>
-				<strong class="ll-hero-step-title">Читайте и делитесь</strong>
-				<p class="ll-hero-step-text">Читалка с оглавлением и поиском, экспорт в Markdown, публикация в общую витрину.</p>
-			</li>
-		</ol>
-	</section>
-}
-
 // landingFinal — завершающий CTA-блок.
 templ landingFinal(authed bool) {
 	<section class="ll-land-final">
@@ -114,7 +108,6 @@ templ landingFinal(authed bool) {
 		} else {
 			<a class="ll-btn ll-btn--accent ll-btn--lg" href="/auth/login">Войти и загрузить</a>
 		}
-		<a class="ll-land-final-link" href="/hub">Сначала посмотреть готовые конспекты →</a>
 	</section>
 }
 

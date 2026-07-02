@@ -35,21 +35,21 @@
     window.scrollTo({ top: target.getBoundingClientRect().top + window.scrollY - 72, behavior: 'smooth' });
   }));
 
-  selectAll('.ll-reader-player').forEach((player) => {
-    const media = player.querySelector('audio, video');
-    if (!media) return;
-    const start = Number(player.dataset.start || 0);
-    const end = Number(player.dataset.end || 0);
-    media.addEventListener('play', () => {
-      if (media.currentTime < start || (end && media.currentTime >= end)) media.currentTime = start;
-    });
-    media.addEventListener('timeupdate', () => {
-      if (end && media.currentTime >= end) {
-        media.pause();
-        media.currentTime = start;
-      }
-    });
-  });
+  // Перемотки по data-start/data-end нет намеренно: ядро отдаёт уже
+  // нарезанные файлы фрагментов, а start/end — тайм-коды исходной записи,
+  // они показываются только как подпись.
+
+  // Оглавление: на мобильной раскладке сворачиваем по умолчанию,
+  // при возврате к десктопной ширине всегда разворачиваем.
+  const tocBox = document.getElementById('readerTocBox');
+  if (tocBox) {
+    const narrow = window.matchMedia('(max-width: 880px)');
+    const syncToc = () => {
+      if (narrow.matches) tocBox.open = false; else tocBox.open = true;
+    };
+    syncToc();
+    narrow.addEventListener('change', syncToc);
+  }
 
   const lightbox = document.getElementById('readerLightbox');
   const lightboxClose = lightbox.querySelector('.ll-reader-lightbox-close');
