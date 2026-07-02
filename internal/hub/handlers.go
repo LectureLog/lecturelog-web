@@ -1,11 +1,11 @@
 package hub
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
 
-	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 	"github.com/go-chi/chi/v5"
 )
@@ -29,9 +29,8 @@ func (s *Service) handleHub(w http.ResponseWriter, r *http.Request) {
 		vms[i] = hubToVM(lecture)
 	}
 
-	authed := auth.UserFromContext(r.Context()) != nil
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := web.HubPage(web.NewLayoutData(r.Context(), "Витрина"), vms, authed).Render(r.Context(), w); err != nil {
+	if err := web.HubPage(web.NewLayoutData(r.Context(), "Витрина"), vms).Render(r.Context(), w); err != nil {
 		log.Printf("hub: handleHub render: %v", err)
 	}
 }
@@ -72,4 +71,23 @@ func sourceLabel(sourceKind string) string {
 	default:
 		return sourceKind
 	}
+}
+
+// CardVMs возвращает карточки свежих публичных лекций для лендинга.
+// limit <= 0 или больше количества — вернуть все. Ошибка не пробрасывается:
+// лендинг не должен падать из-за витрины, секция просто скрывается.
+func (s *Service) CardVMs(ctx context.Context, limit int) []web.HubCardVM {
+	lectures, err := s.List(ctx)
+	if err != nil {
+		log.Printf("hub: CardVMs: %v", err)
+		return nil
+	}
+	if limit > 0 && len(lectures) > limit {
+		lectures = lectures[:limit]
+	}
+	vms := make([]web.HubCardVM, len(lectures))
+	for i, lecture := range lectures {
+		vms[i] = hubToVM(lecture)
+	}
+	return vms
 }

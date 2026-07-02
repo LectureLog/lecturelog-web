@@ -175,7 +175,7 @@ func header(data LayoutData, actions templ.Component) templ.Component {
 			templ_7745c5c3_Var4 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<header class=\"ll-topbar\"><div class=\"ll-topbar-inner\"><a class=\"ll-brand\" href=\"/hub\" aria-label=\"LectureLog — на главную\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 7, "<header class=\"ll-topbar\"><div class=\"ll-topbar-inner\"><a class=\"ll-brand\" href=\"/\" aria-label=\"LectureLog — на главную\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}

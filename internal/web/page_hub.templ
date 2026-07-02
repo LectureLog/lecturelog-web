@@ -14,20 +14,19 @@ type HubCardVM struct {
 	ReadURL         string
 }
 
-// HubPage — публичная витрина лекций.
-// Анонимному посетителю сверху показывается hero-блок (витрина = лендинг),
-// авторизованному — компактная шапка страницы.
-templ HubPage(data LayoutData, vms []HubCardVM, authed bool) {
+// HubPage — публичная витрина лекций: заголовок страницы и сетка карточек.
+// Промо-контент живёт на лендинге «/», витрина остаётся спокойным каталогом.
+templ HubPage(data LayoutData, vms []HubCardVM) {
 	@Layout(withNav(data, "hub"), nil) {
-		if !authed {
-			@hubHero()
-		}
 		<section class="ll-lectures-section">
-			<div class="ll-section-head">
-				<h2 class="ll-section-title">Публичные лекции</h2>
-				if len(vms) > 0 {
-					<span class="ll-section-count">{ fmt.Sprintf("%d", len(vms)) }</span>
-				}
+			<div class="ll-page-head">
+				<div class="ll-page-head-text">
+					<p class="ll-page-kicker">Витрина</p>
+					<h1 class="ll-page-title">Публичные лекции</h1>
+					if len(vms) > 0 {
+						<p class="ll-page-sub">{ publicCount(len(vms)) } — открыты всем, читайте без входа</p>
+					}
+				</div>
 			</div>
 			if len(vms) == 0 {
 				@HubEmpty()
@@ -42,35 +41,19 @@ templ HubPage(data LayoutData, vms []HubCardVM, authed bool) {
 	}
 }
 
-// hubHero — лендинг-блок витрины для анонимного посетителя:
-// кикер, крупный serif-заголовок, лид, CTA и три шага «как это работает».
-templ hubHero() {
-	<section class="ll-hero">
-		<p class="ll-hero-kicker">Читальный зал</p>
-		<h1 class="ll-hero-title">Запись лекции — в конспект, который удобно читать</h1>
-		<p class="ll-hero-dek">Загрузите аудио или видео: LectureLog расшифрует речь, разобьёт материал по темам и соберёт структурированный конспект с тайм-кодами и слайдами.</p>
-		<div class="ll-hero-cta">
-			<a class="ll-btn ll-btn--accent ll-btn--lg" href="/auth/login">Войти и загрузить лекцию</a>
-			<span class="ll-hero-note">Часовая лекция — конспект за ~5 минут</span>
-		</div>
-		<ol class="ll-hero-steps">
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">01</span>
-				<strong class="ll-hero-step-title">Загрузите запись</strong>
-				<p class="ll-hero-step-text">Аудио, видео или ссылка на YouTube — до 2 ГБ.</p>
-			</li>
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">02</span>
-				<strong class="ll-hero-step-title">Дождитесь обработки</strong>
-				<p class="ll-hero-step-text">Распознаем речь, выделим темы, достанем слайды из видео.</p>
-			</li>
-			<li class="ll-hero-step">
-				<span class="ll-hero-step-num">03</span>
-				<strong class="ll-hero-step-title">Читайте и делитесь</strong>
-				<p class="ll-hero-step-text">Конспект с тайм-кодами — в читалке, с поиском и экспортом.</p>
-			</li>
-		</ol>
-	</section>
+// publicCount склоняет счётчик публичных лекций.
+func publicCount(n int) string {
+	mod10, mod100 := n%10, n%100
+	var word string
+	switch {
+	case mod10 == 1 && mod100 != 11:
+		word = "лекция"
+	case mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14):
+		word = "лекции"
+	default:
+		word = "лекций"
+	}
+	return fmt.Sprintf("%d %s", n, word)
 }
 
 // HubCard — карточка публичной лекции со ссылкой в читалку.

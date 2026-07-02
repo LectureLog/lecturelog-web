@@ -106,7 +106,7 @@
   .ll-reader-sub > header { display: flex; gap: 12px; align-items: baseline; }
   .ll-reader-sub > header span { color: var(--text-3); font-size: 13px; font-variant-numeric: tabular-nums; }
   .ll-reader-sub h3 { margin: 0; color: var(--ink); font: 600 22px/1.3 var(--font-serif); }
-  .ll-reader-prose { color: var(--text-2); font: 18px/1.72 var(--font-serif); }
+  .ll-reader-prose { color: var(--ink); font: 18px/1.72 var(--font-serif); }
   .ll-reader-prose > :first-child { margin-top: 15px; }
   .ll-reader-prose a { color: var(--accent); }
   .ll-reader-prose blockquote, .ll-reader-prose details { margin: 18px 0; padding: 14px 17px; border-left: 3px solid var(--accent); border-radius: 0 var(--r-card) var(--r-card) 0; background: var(--accent-soft); }
@@ -2180,5 +2180,365 @@
   .ll-lec-read:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: 2px;
+  }
+}
+
+/* ─── Лендинг «/» ────────────────────────────────────────────────────────── */
+@layer components {
+  .ll-landing {
+    max-width: 980px;
+    margin: 0 auto;
+  }
+
+  /* Вторичная крупная кнопка hero: прозрачная с рамкой */
+  .ll-btn--ghost {
+    border: 1px solid var(--border-2);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .ll-btn--ghost:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Секции лендинга разделяются hairline-линиями */
+  .ll-land-section {
+    padding: 46px 0 54px;
+    border-top: 1px solid var(--border);
+  }
+
+  .ll-landing .ll-hero {
+    margin-bottom: 0;
+    padding-bottom: 64px;
+  }
+
+  .ll-landing .ll-hero-cta {
+    margin-bottom: 0;
+  }
+
+  .ll-land-title {
+    font-family: var(--font-serif);
+    font-size: 26px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+    margin: 0 0 26px;
+  }
+
+  /* Форматы источников: три карточки */
+  .ll-land-formats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .ll-land-format {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--r-card);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    font-family: var(--font-sans);
+  }
+
+  .ll-land-format-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: var(--r-btn);
+    background: var(--accent-soft);
+    color: var(--accent);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 6px;
+  }
+
+  .ll-land-format-icon svg {
+    width: 20px;
+    height: 20px;
+  }
+
+  .ll-land-format strong {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .ll-land-format p {
+    margin: 0;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: var(--text-2);
+    flex: 1;
+  }
+
+  .ll-land-format-meta {
+    font-size: 12px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+    letter-spacing: 0.02em;
+  }
+
+  /* Опции (PDF-презентация, слайды из видео) */
+  .ll-land-options {
+    margin-top: 16px;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .ll-land-option {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 18px;
+    border: 1px dashed var(--border-2);
+    border-radius: var(--r-card);
+    font-family: var(--font-sans);
+  }
+
+  .ll-land-option .ll-badge {
+    flex: none;
+    margin-top: 2px;
+  }
+
+  .ll-land-option strong {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 3px;
+  }
+
+  .ll-land-option p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-2);
+  }
+
+  /* Шаги на лендинге — без верхней линии (её даёт секция) */
+  .ll-hero-steps--landing {
+    border-top: none;
+    padding-top: 0;
+  }
+
+  /* Финальный CTA-блок */
+  .ll-land-final {
+    border-top: 1px solid var(--border);
+    padding: 52px 0 72px;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .ll-land-final-title {
+    font-family: var(--font-serif);
+    font-size: 30px;
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .ll-land-final-link {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    color: var(--text-2);
+    text-decoration: none;
+  }
+
+  .ll-land-final-link:hover {
+    color: var(--accent);
+  }
+
+  @media (max-width: 900px) {
+    .ll-land-formats {
+      grid-template-columns: 1fr;
+    }
+
+    .ll-land-options {
+      grid-template-columns: 1fr;
+    }
+  }
+}
+
+/* ─── Ридер 2.0: хлебная крошка, оглавление, слайды, callout ─────────────── */
+@layer components {
+  /* Хлебная крошка «назад» над заголовком конспекта */
+  .ll-reader-back {
+    display: inline-block;
+    margin-bottom: 22px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-2);
+    text-decoration: none;
+    transition: color 0.16s;
+  }
+
+  .ll-reader-back:hover {
+    color: var(--accent);
+  }
+
+  .ll-reader-back:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* Сворачиваемое оглавление: summary виден только на мобильной раскладке */
+  .ll-reader-toc-box > summary {
+    list-style: none;
+    cursor: pointer;
+  }
+
+  .ll-reader-toc-box > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ll-reader-toc-summary {
+    display: none;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 14px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-btn);
+    background: var(--surface);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .ll-reader-toc-summary svg {
+    width: 15px;
+    height: 15px;
+    color: var(--text-3);
+    transition: transform 0.2s;
+  }
+
+  .ll-reader-toc-box[open] .ll-reader-toc-summary svg {
+    transform: rotate(180deg);
+  }
+
+  /* Лейбл «Содержание» на десктопе — как прежний заголовок блока */
+  .ll-reader-toc-label-desktop {
+    margin: 0 0 12px;
+    color: var(--text-3);
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+  }
+
+  @media (max-width: 880px) {
+    .ll-reader-toc-summary {
+      display: flex;
+    }
+
+    .ll-reader-toc-label-desktop {
+      display: none;
+    }
+
+    .ll-reader-toc-box .ll-reader-toc {
+      margin-top: 12px;
+      padding: 14px 14px 10px;
+      border: 1px solid var(--border);
+      border-radius: var(--r-card);
+      background: var(--surface);
+    }
+  }
+
+  /* Сетка слайдов: несколько слайдов в подтеме — двумя колонками */
+  .ll-reader-slides {
+    margin: 22px 0;
+    display: grid;
+    gap: 12px;
+  }
+
+  .ll-reader-slides--multi {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .ll-reader-slides .ll-reader-slide {
+    margin: 0;
+  }
+
+  .ll-reader-slide {
+    transition: border-color 0.16s;
+  }
+
+  .ll-reader-slide:hover {
+    border-color: var(--accent);
+  }
+
+  @media (max-width: 620px) {
+    .ll-reader-slides--multi {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Callout из ядра ([!tangent] и др.) — сворачиваемое отступление */
+  .ll-reader-prose .ll-callout {
+    margin: 18px 0;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 var(--r-card) var(--r-card) 0;
+    background: var(--surface);
+  }
+
+  .ll-reader-prose .ll-callout > summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 11px 15px;
+    cursor: pointer;
+    list-style: none;
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .ll-reader-prose .ll-callout > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .ll-reader-prose .ll-callout > summary svg {
+    width: 15px;
+    height: 15px;
+    color: var(--text-3);
+    transition: transform 0.22s;
+    flex: none;
+  }
+
+  .ll-reader-prose .ll-callout[open] > summary {
+    border-bottom: 1px solid var(--border);
+  }
+
+  .ll-reader-prose .ll-callout[open] > summary svg {
+    transform: rotate(180deg);
+  }
+
+  .ll-callout-body {
+    padding: 4px 17px 8px;
+    font-size: 17px;
+    font-style: italic;
+    line-height: 1.66;
   }
 }

@@ -22,12 +22,19 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 		return ReaderView{}, err
 	}
 
+	// Ядро может не знать названия источника (title: null) — показываем
+	// заголовок лекции, чтобы карточка источника не была пустой.
+	sourceTitle := structure.Source.Title
+	if sourceTitle == "" {
+		sourceTitle = lecture.Title
+	}
+
 	view := ReaderView{
 		LectureID:   lecture.ID,
 		Title:       lecture.Title,
-		SourceTitle: structure.Source.Title,
+		SourceTitle: sourceTitle,
 		SourceKind:  structure.Source.Kind,
-		Duration:    structure.Source.Duration,
+		Duration:    int(structure.Source.Duration),
 		Sections:    make([]ViewSection, 0, len(structure.Sections)),
 		IsOwner:     isOwner,
 	}
@@ -101,8 +108,8 @@ func (s *Service) buildSubtopic(ctx context.Context, sectionNumber, subtopicNumb
 		}
 		view.Media = &ViewMedia{
 			Kind:  subtopic.Media.Kind,
-			Start: subtopic.Media.Start,
-			End:   subtopic.Media.End,
+			Start: int(subtopic.Media.Start),
+			End:   int(subtopic.Media.End),
 			URL:   url,
 		}
 	}

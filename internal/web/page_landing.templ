@@ -1,0 +1,124 @@
+package web
+
+// LandingPage — главная страница «/»: короткий лендинг. Hero с главным
+// действием, свежие публичные конспекты (живая демонстрация результата),
+// компактный блок форматов. Промо не растягиваем: примеры говорят сами.
+templ LandingPage(data LayoutData, examples []HubCardVM) {
+	@Layout(data, nil) {
+		<div class="ll-landing">
+			@landingHero(data.IsAuthed)
+			@landingExamples(examples)
+			@landingFormats()
+			@landingFinal(data.IsAuthed)
+		</div>
+	}
+}
+
+// landingHero — верхний экран: что это и главное действие.
+templ landingHero(authed bool) {
+	<section class="ll-hero">
+		<p class="ll-hero-kicker">Читальный зал</p>
+		<h1 class="ll-hero-title">Запись лекции — в конспект, который удобно читать</h1>
+		<p class="ll-hero-dek">LectureLog расшифрует речь, разобьёт материал по темам и соберёт структурированный конспект с тайм-кодами, фрагментами записи и слайдами.</p>
+		<div class="ll-hero-cta">
+			if authed {
+				<a class="ll-btn ll-btn--accent ll-btn--lg" href="/upload">Загрузить лекцию</a>
+				<a class="ll-btn ll-btn--ghost ll-btn--lg" href="/lectures">Мои лекции</a>
+			} else {
+				<a class="ll-btn ll-btn--accent ll-btn--lg" href="/auth/login">Войти и загрузить</a>
+				<a class="ll-btn ll-btn--ghost ll-btn--lg" href="/hub">Посмотреть примеры</a>
+			}
+		</div>
+	</section>
+}
+
+// landingExamples — свежие публичные конспекты: результат сервиса вместо
+// длинных объяснений. Пустой список → секция не показывается.
+templ landingExamples(examples []HubCardVM) {
+	if len(examples) > 0 {
+		<section class="ll-land-section">
+			<div class="ll-land-sec-head">
+				<h2 class="ll-land-title">Свежие конспекты</h2>
+				<a class="ll-land-more" href="/hub">Вся витрина →</a>
+			</div>
+			<div class="ll-lec-grid">
+				for _, vm := range examples {
+					@HubCard(vm)
+				}
+			</div>
+		</section>
+	}
+}
+
+// landingFormats — блок «С чем работаем»: форматы источников и опции.
+templ landingFormats() {
+	<section class="ll-land-section">
+		<h2 class="ll-land-title">С чем умеем работать</h2>
+		<div class="ll-land-formats">
+			<div class="ll-land-format">
+				<span class="ll-land-format-icon">
+					@iconAudioWave()
+				</span>
+				<strong>Аудиозаписи</strong>
+				<p>Диктофон или запись пары.</p>
+				<span class="ll-land-format-meta">MP3 · WAV · M4A</span>
+			</div>
+			<div class="ll-land-format">
+				<span class="ll-land-format-icon">
+					@iconUploadMedia()
+				</span>
+				<strong>Видеозаписи</strong>
+				<p>Лекции, вебинары, доклады.</p>
+				<span class="ll-land-format-meta">MP4 · MOV — до 2 ГБ</span>
+			</div>
+			<div class="ll-land-format">
+				<span class="ll-land-format-icon">
+					@iconUploadLink()
+				</span>
+				<strong>Ссылки на YouTube</strong>
+				<p>Или прямой URL на файл записи — скачаем сами.</p>
+				<span class="ll-land-format-meta">youtube.com · прямые ссылки</span>
+			</div>
+		</div>
+		<div class="ll-land-options">
+			<div class="ll-land-option">
+				<span class="ll-badge">опционально</span>
+				<div>
+					<strong>PDF с презентацией</strong>
+					<p>Приложите слайды отдельным файлом — вставим их в нужные темы конспекта.</p>
+				</div>
+			</div>
+			<div class="ll-land-option">
+				<span class="ll-badge">опционально</span>
+				<div>
+					<strong>Слайды из видео</strong>
+					<p>Если отдельной презентации нет — найдём кадры со слайдами прямо в записи.</p>
+				</div>
+			</div>
+		</div>
+	</section>
+}
+
+// landingFinal — завершающий CTA-блок.
+templ landingFinal(authed bool) {
+	<section class="ll-land-final">
+		<h2 class="ll-land-final-title">Попробуйте на своей лекции</h2>
+		if authed {
+			<a class="ll-btn ll-btn--accent ll-btn--lg" href="/upload">Загрузить лекцию</a>
+		} else {
+			<a class="ll-btn ll-btn--accent ll-btn--lg" href="/auth/login">Войти и загрузить</a>
+		}
+	</section>
+}
+
+// iconAudioWave — иконка звуковой волны для формата «аудио».
+templ iconAudioWave() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M2 12h2"></path>
+		<path d="M6 8v8"></path>
+		<path d="M10 5v14"></path>
+		<path d="M14 8v8"></path>
+		<path d="M18 10v4"></path>
+		<path d="M22 12h-2"></path>
+	</svg>
+}

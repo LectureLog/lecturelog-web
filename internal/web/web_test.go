@@ -211,18 +211,22 @@ func TestLayout_HtmxHeaders(t *testing.T) {
 	}
 }
 
-// TestRouter_RootRedirect проверяет, что корень ведёт на витрину.
-func TestRouter_RootRedirect(t *testing.T) {
+// TestRouter_Landing проверяет лендинг на корневом маршруте.
+func TestRouter_Landing(t *testing.T) {
 	router := web.NewRouter()
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	router.ServeHTTP(rec, req)
 
-	if rec.Code != http.StatusFound {
-		t.Errorf("GET / = %d, ожидается 302", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET / = %d, ожидается 200", rec.Code)
 	}
-	if loc := rec.Header().Get("Location"); loc != "/hub" {
-		t.Errorf("GET / Location = %q, ожидается /hub", loc)
+	body := rec.Body.String()
+	if !strings.Contains(body, "ll-hero") {
+		t.Error("лендинг должен содержать hero-блок")
+	}
+	if !strings.Contains(body, "ll-land-formats") {
+		t.Error("лендинг должен содержать блок форматов")
 	}
 }
 
@@ -327,12 +331,12 @@ func TestRouter_ExistingRoutesUnchanged(t *testing.T) {
 		}),
 	)
 
-	// GET / должен по-прежнему работать (редирект на витрину)
+	// GET / должен по-прежнему работать (лендинг)
 	rec := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	router.ServeHTTP(rec, req)
-	if rec.Code != http.StatusFound {
-		t.Errorf("GET / с опциями = %d, ожидается 302", rec.Code)
+	if rec.Code != http.StatusOK {
+		t.Errorf("GET / с опциями = %d, ожидается 200", rec.Code)
 	}
 
 	// Статика должна работать

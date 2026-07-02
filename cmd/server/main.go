@@ -278,6 +278,10 @@ func main() {
 
 	// Собираем chi-роутер с auth-middleware и маршрутами
 	handler := web.NewRouter(
+		// Лендинг «/»: свежие публичные конспекты из витрины (до 6 карточек).
+		web.WithLandingLectures(func(r *http.Request) []web.HubCardVM {
+			return hubSvc.CardVMs(r.Context(), 6)
+		}),
 		web.WithGlobalMiddleware(
 			authSvc.LoadSession,                          // читает сессию → *User в контекст
 			authSvc.LoadAdmin,                            // читает allowlist → admin-флаг в контекст
