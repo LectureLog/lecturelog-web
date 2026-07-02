@@ -6,10 +6,17 @@
   Синхронизировать tokens.css с design/tokens.css при изменениях дизайна.
 */
 
-@import "tailwindcss";
+/* source(none) отключает автоматическое сканирование корня репозитория:
+   иначе Tailwind сканирует ВСЁ дерево (кроме .gitignore) и подхватывает
+   мусорные utility-имена из посторонних файлов — untracked docs, а главное
+   скомпилированный бинарник ./preview (go build ./cmd/preview), в чьих
+   строках есть слова collapse/grow/table/truncate. Из-за этого локальный
+   app.css расходился с CI и gen-check падал. Ниже — только явные источники. */
+@import "tailwindcss" source(none);
 
-/* Сканирование templ-шаблонов для purge (Tailwind v4 CSS-first, @source вместо content[]).
-   Путь ../  относительно assets/ — покрывает internal/web/**  включая C1-шаблоны. */
+/* Явный источник: web-слой (templ-шаблоны и _templ.go). Путь относительно
+   assets/, покрывает internal/web/**. .min.js и gitignored файлы Tailwind
+   пропускает сам. Детерминированно: всё трекается и идентично в CI. */
 @source "../";
 
 /* Дизайн-токены «Читальный зал» — рантайм-копия design/tokens.css.
