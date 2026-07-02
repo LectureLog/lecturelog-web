@@ -37,14 +37,20 @@ func main() {
 	}
 
 	handler := web.NewRouter(web.WithMount(func(r chi.Router) {
+		r.Get("/landing", render(func() templ.Component {
+			return web.LandingPage(layout("LectureLog"))
+		}))
+		r.Get("/landing-authed", render(func() templ.Component {
+			return web.LandingPage(layoutAuthed("LectureLog"))
+		}))
 		r.Get("/hub", render(func() templ.Component {
-			return web.HubPage(layout("Хаб"), hubCards(), false)
+			return web.HubPage(layout("Витрина"), hubCards())
 		}))
 		r.Get("/hub-authed", render(func() templ.Component {
-			return web.HubPage(layoutAuthed("Хаб"), hubCards(), true)
+			return web.HubPage(layoutAuthed("Витрина"), hubCards())
 		}))
 		r.Get("/hub-empty", render(func() templ.Component {
-			return web.HubPage(layout("Хаб"), nil, false)
+			return web.HubPage(layout("Витрина"), nil)
 		}))
 		r.Get("/lectures", render(func() templ.Component {
 			return web.LecturesPage(layoutAuthed("Мои лекции"), lectureCards())
@@ -131,7 +137,7 @@ func readerVM() (web.ReaderVM, error) {
 		Title:       structure.Source.Title,
 		SourceTitle: structure.Source.Title,
 		SourceKind:  structure.Source.Kind,
-		Duration:    structure.Source.Duration,
+		Duration:    int(structure.Source.Duration),
 		IsOwner:     true,
 	}
 	for si, section := range structure.Sections {

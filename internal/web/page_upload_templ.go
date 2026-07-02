@@ -112,7 +112,7 @@ func UploadPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<span data-submit-label>Сгенерировать конспект</span></button> <span class=\"ll-upload-cta-note\" data-status>Обработка часовой лекции занимает ~3–5 минут.</span></div></div><form id=\"ll-upload-url-panel\" class=\"ll-upload-panel ll-upload-hidden\" data-panel=\"url\" hx-post=\"/upload/youtube\" hx-swap=\"none\" hx-headers=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 9, "<span data-submit-label>Сгенерировать конспект</span></button> <span class=\"ll-upload-cta-note\" data-status>Конспект появится в «Моих лекциях» — обработка идёт на сервере, страницу можно закрыть.</span></div></div><form id=\"ll-upload-url-panel\" class=\"ll-upload-panel ll-upload-hidden\" data-panel=\"url\" hx-post=\"/upload/youtube\" hx-swap=\"none\" hx-headers=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -141,7 +141,7 @@ func UploadPage(data LayoutData) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span>Сгенерировать конспект</span></button> <span class=\"ll-upload-cta-note\">Обработка начнётся сразу после проверки ссылки.</span></div></form><input class=\"ll-upload-hidden\" type=\"file\" accept=\"video/*,audio/*,.mp4,.mov,.mp3,.wav,.m4a\" data-file-input></section><script src=\"/static/js/upload.js\" defer></script>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "<span>Сгенерировать конспект</span></button> <span class=\"ll-upload-cta-note\">Проверим ссылку и начнём обработку — конспект появится в «Моих лекциях».</span></div></form><input class=\"ll-upload-hidden\" type=\"file\" accept=\"video/*,audio/*,.mp4,.mov,.mp3,.wav,.m4a\" data-file-input></section><script src=\"/static/js/upload.js\" defer></script>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

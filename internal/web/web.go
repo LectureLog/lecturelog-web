@@ -75,10 +75,13 @@ func NewRouter(opts ...Option) http.Handler {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(sfs)))
 
-	// Корень ведёт на витрину: отдельной главной нет — витрина публичных
-	// лекций и есть лицо сервиса.
+	// Главная — лендинг сервиса: что это, с чем работает, куда идти дальше.
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
-		http.Redirect(w, req, "/hub", http.StatusFound)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		data := NewLayoutData(req.Context(), "LectureLog")
+		if err := LandingPage(data).Render(req.Context(), w); err != nil {
+			http.Error(w, "ошибка рендера", http.StatusInternalServerError)
+		}
 	})
 
 	// Стилизованная 404 вместо голого текста chi. Глобальные middleware

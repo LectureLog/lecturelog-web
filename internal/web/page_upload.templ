@@ -72,7 +72,7 @@ templ UploadPage(data LayoutData) {
 						@iconUploadPlay()
 						<span data-submit-label>Сгенерировать конспект</span>
 					</button>
-					<span class="ll-upload-cta-note" data-status>Обработка часовой лекции занимает ~3–5 минут.</span>
+					<span class="ll-upload-cta-note" data-status>Конспект появится в «Моих лекциях» — обработка идёт на сервере, страницу можно закрыть.</span>
 				</div>
 			</div>
 			<form id="ll-upload-url-panel" class="ll-upload-panel ll-upload-hidden" data-panel="url" hx-post="/upload/youtube" hx-swap="none" hx-headers={ `{"X-CSRF-Token":"` + data.CSRFToken + `"}` } method="post">
@@ -104,7 +104,7 @@ templ UploadPage(data LayoutData) {
 						@iconUploadPlay()
 						<span>Сгенерировать конспект</span>
 					</button>
-					<span class="ll-upload-cta-note">Обработка начнётся сразу после проверки ссылки.</span>
+					<span class="ll-upload-cta-note">Проверим ссылку и начнём обработку — конспект появится в «Моих лекциях».</span>
 				</div>
 			</form>
 			<input class="ll-upload-hidden" type="file" accept="video/*,audio/*,.mp4,.mov,.mp3,.wav,.m4a" data-file-input/>
