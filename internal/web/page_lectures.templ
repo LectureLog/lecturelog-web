@@ -35,8 +35,23 @@ type LectureCardVM struct {
 // LecturesPage — страница «Мои лекции» в базовом Layout.
 // Показывает сетку карточек лекций или пустое состояние при отсутствии.
 templ LecturesPage(data LayoutData, vms []LectureCardVM) {
-	@Layout(data, nil) {
+	@Layout(withNav(data, "lectures"), nil) {
 		<section class="ll-lectures-section">
+			<div class="ll-page-head">
+				<div class="ll-page-head-text">
+					<p class="ll-page-kicker">Библиотека</p>
+					<h1 class="ll-page-title">Мои лекции</h1>
+					if len(vms) > 0 {
+						<p class="ll-page-sub">{ lectureCount(len(vms)) }</p>
+					}
+				</div>
+				if len(vms) > 0 {
+					<a href="/upload" class="ll-btn ll-btn--accent ll-page-head-cta">
+						@iconPlus()
+						<span>Загрузить лекцию</span>
+					</a>
+				}
+			</div>
 			if len(vms) == 0 {
 				@LecturesEmpty()
 			} else {
@@ -48,6 +63,29 @@ templ LecturesPage(data LayoutData, vms []LectureCardVM) {
 			}
 		</section>
 	}
+}
+
+// lectureCount склоняет счётчик конспектов: 1 конспект, 2 конспекта, 5 конспектов.
+func lectureCount(n int) string {
+	mod10, mod100 := n%10, n%100
+	var word string
+	switch {
+	case mod10 == 1 && mod100 != 11:
+		word = "конспект"
+	case mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14):
+		word = "конспекта"
+	default:
+		word = "конспектов"
+	}
+	return fmt.Sprintf("%d %s", n, word)
+}
+
+// iconPlus — иконка «плюс» для CTA загрузки.
+templ iconPlus() {
+	<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+		<path d="M12 5v14"></path>
+		<path d="M5 12h14"></path>
+	</svg>
 }
 
 // LectureCard — карточка одной лекции.
@@ -105,7 +143,17 @@ templ LectureProgress(vm LectureCardVM) {
 			</div>
 			<div class="ll-lec-bar"><i style={ progressWidth(vm.ProgressPct) }></i></div>
 		} else {
-			<div class={ "ll-status ll-status--" + vm.Status }>{ vm.StatusLabel }</div>
+			<div class="ll-status-row">
+				<div class={ "ll-status ll-status--" + vm.Status }>{ vm.StatusLabel }</div>
+				if vm.Status == "ready" {
+					// Главное действие карточки: открыть конспект в читалке.
+					// Появляется и при htmx-свапе фрагмента по завершении обработки.
+					<a class="ll-lec-read" href={ "/read/" + vm.ID }>
+						<span>Читать</span>
+						@iconArrowRight()
+					</a>
+				}
+			</div>
 			if vm.ErrorText != "" {
 				<p class="ll-lec-error">{ vm.ErrorText }</p>
 			}

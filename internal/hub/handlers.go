@@ -31,7 +31,7 @@ func (s *Service) handleHub(w http.ResponseWriter, r *http.Request) {
 
 	authed := auth.UserFromContext(r.Context()) != nil
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := web.HubPage(web.NewLayoutData(r.Context(), "Хаб"), vms, authed).Render(r.Context(), w); err != nil {
+	if err := web.HubPage(web.NewLayoutData(r.Context(), "Витрина"), vms, authed).Render(r.Context(), w); err != nil {
 		log.Printf("hub: handleHub render: %v", err)
 	}
 }

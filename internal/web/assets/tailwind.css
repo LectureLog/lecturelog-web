@@ -1519,3 +1519,666 @@
     }
   }
 }
+
+/* ════════════════════════════════════════════════════════════════════════════
+   Каркас 2.0: базовые стили документа, навигация шапки, футер, hero витрины,
+   заголовки страниц, полиш карточек, 404, печать, reduced-motion.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  /* color-scheme синхронизирует нативные контролы (плееры, скроллбары) с темой */
+  :root {
+    color-scheme: light;
+  }
+
+  [data-theme="dark"] {
+    color-scheme: dark;
+  }
+
+  /* Фон и цвет документа — раньше не задавались вовсе: под контентом
+     просвечивал дефолтный фон браузера (чёрный в тёмном режиме ОС). */
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection {
+    background: var(--mark);
+    color: var(--ink);
+  }
+
+  /* Тонкие скроллбары в цветах темы */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-2) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-2);
+    border-radius: 5px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Спокойная моторика — уважение reduced-motion (STYLE_GUIDE §8) */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  /* Прижатый футер: main растягивается, футер уходит вниз.
+     width:100% обязателен: body теперь flex-колонка, и margin:0 auto
+     иначе переводит main в shrink-to-fit. */
+  .ll-main {
+    flex: 1 0 auto;
+    width: 100%;
+  }
+
+  /* ─── Шапка: бренд-ссылка + навигация ────────────────────────────────────── */
+
+  .ll-brand {
+    flex: none;
+    text-decoration: none;
+    color: inherit;
+    border-radius: var(--r-btn);
+    padding: 5px 8px 5px 2px;
+    margin-left: -2px;
+  }
+
+  .ll-brand:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .ll-brand:hover .ll-brand-t {
+    color: var(--accent);
+  }
+
+  .ll-brand-t {
+    transition: color 0.16s;
+  }
+
+  .ll-nav {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 8px;
+    font-family: var(--font-sans);
+    /* На узких экранах навигация прокручивается, а не наезжает на действия */
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .ll-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ll-nav-link {
+    position: relative;
+    padding: 8px 11px;
+    border-radius: var(--r-btn);
+    font-size: 13.5px;
+    font-weight: 500;
+    color: var(--text-2);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 0.16s, background 0.16s;
+  }
+
+  .ll-nav-link:hover {
+    color: var(--ink);
+    background: var(--surface-2);
+  }
+
+  .ll-nav-link:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .ll-nav-link--active {
+    color: var(--ink);
+  }
+
+  .ll-nav-link--active::after {
+    content: "";
+    position: absolute;
+    left: 11px;
+    right: 11px;
+    bottom: 3px;
+    height: 2px;
+    border-radius: 1px;
+    background: var(--accent);
+  }
+
+  /* Кнопка «Войти» в шапке — вторичная, компактная */
+  .ll-btn--login {
+    min-height: 34px;
+    padding: 5px 15px;
+    font-size: 13.5px;
+    border: 1px solid var(--border-2);
+    background: var(--surface);
+    color: var(--ink);
+  }
+
+  .ll-btn--login:hover {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* Форма выхода не должна влиять на флекс-раскладку шапки */
+  .ll-logout-form {
+    display: contents;
+  }
+
+  /* Иконка в кнопках .ll-btn */
+  .ll-btn {
+    gap: 8px;
+  }
+
+  .ll-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ll-btn:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .ll-btn--lg {
+    min-height: 50px;
+    padding: 0 28px;
+    font-size: 14.5px;
+    font-weight: 600;
+  }
+
+  /* ─── Футер ──────────────────────────────────────────────────────────────── */
+
+  .ll-footer {
+    border-top: 1px solid var(--border);
+    font-family: var(--font-sans);
+  }
+
+  .ll-footer-inner {
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 24px 22px 32px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+  }
+
+  .ll-footer-brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    font-size: 13.5px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .ll-footer-brand .ll-brand-mark {
+    width: 20px;
+    height: 20px;
+    border-radius: 5px;
+  }
+
+  .ll-footer-brand .ll-brand-mark svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .ll-footer-tag {
+    flex: 1;
+    min-width: 240px;
+    margin: 0;
+    font-size: 12.5px;
+    color: var(--text-3);
+  }
+
+  .ll-footer-link {
+    font-size: 12.5px;
+    color: var(--text-2);
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: 0.16s;
+  }
+
+  .ll-footer-link:hover {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
+  /* ─── Hero витрины (анонимный посетитель) ───────────────────────────────── */
+
+  .ll-hero {
+    text-align: center;
+    padding-top: 44px;
+    margin-bottom: 84px;
+  }
+
+  .ll-hero-kicker {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 18px;
+  }
+
+  .ll-hero-title {
+    font-family: var(--font-serif);
+    font-size: clamp(36px, 5.2vw, 56px);
+    line-height: 1.08;
+    font-weight: 600;
+    letter-spacing: -0.025em;
+    color: var(--ink);
+    max-width: 21ch;
+    margin: 0 auto 20px;
+  }
+
+  .ll-hero-dek {
+    font-family: var(--font-serif);
+    font-style: italic;
+    font-size: 20px;
+    line-height: 1.6;
+    color: var(--text-2);
+    max-width: 52ch;
+    margin: 0 auto 30px;
+  }
+
+  .ll-hero-cta {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 64px;
+  }
+
+  .ll-hero-note {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ll-hero-steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+    list-style: none;
+    margin: 0;
+    padding: 30px 0 0;
+    border-top: 1px solid var(--border);
+    text-align: left;
+  }
+
+  .ll-hero-step-num {
+    display: block;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+    margin-bottom: 8px;
+  }
+
+  .ll-hero-step-title {
+    display: block;
+    font-family: var(--font-serif);
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--ink);
+    margin-bottom: 6px;
+  }
+
+  .ll-hero-step-text {
+    font-family: var(--font-sans);
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: var(--text-2);
+    margin: 0;
+  }
+
+  /* ─── Заголовок секции витрины ──────────────────────────────────────────── */
+
+  .ll-section-head {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 18px;
+  }
+
+  .ll-section-title {
+    font-family: var(--font-serif);
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .ll-section-count {
+    font-family: var(--font-sans);
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--accent);
+    background: var(--accent-soft);
+    border-radius: var(--r-pill);
+    padding: 2px 9px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── Шапка страницы («Мои лекции») ─────────────────────────────────────── */
+
+  .ll-page-head {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 26px;
+  }
+
+  .ll-page-kicker {
+    font-family: var(--font-sans);
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 10px;
+  }
+
+  .ll-page-title {
+    font-family: var(--font-serif);
+    font-size: 36px;
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    margin: 0;
+  }
+
+  .ll-page-sub {
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--text-3);
+    margin: 8px 0 0;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ll-page-head-cta {
+    flex: none;
+  }
+
+  /* ─── Полиш карточек витрины ────────────────────────────────────────────── */
+
+  .ll-hub-card-arrow {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--accent);
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.18s, transform 0.18s;
+  }
+
+  .ll-hub-card-arrow svg {
+    width: 16px;
+    height: 16px;
+  }
+
+  .ll-hub-card:hover .ll-hub-card-arrow,
+  .ll-hub-card:focus-visible .ll-hub-card-arrow {
+    opacity: 1;
+    transform: none;
+  }
+
+  .ll-hub-avatar--ph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent-soft);
+    color: var(--accent);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .ll-hub-author-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Пустые состояния: иконка в мягком круге */
+  .ll-empty-icon {
+    width: 74px;
+    height: 74px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-3);
+  }
+
+  .ll-empty-icon svg {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* ─── 404 ───────────────────────────────────────────────────────────────── */
+
+  .ll-empty--404 {
+    padding-top: 70px;
+  }
+
+  .ll-404-code {
+    font-family: var(--font-serif);
+    font-size: 96px;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: -0.04em;
+    color: var(--border-2);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ─── Мобильная шапка ───────────────────────────────────────────────────── */
+
+  @media (max-width: 640px) {
+    .ll-topbar-inner {
+      gap: 8px;
+      padding: 0 13px;
+    }
+
+    .ll-brand-t {
+      display: none;
+    }
+
+    .ll-nav {
+      margin-left: 0;
+    }
+
+    .ll-nav-link {
+      padding: 8px 9px;
+      font-size: 13px;
+    }
+
+    .ll-main {
+      padding-left: 13px;
+      padding-right: 13px;
+    }
+
+    .ll-footer-inner {
+      padding-left: 13px;
+      padding-right: 13px;
+    }
+
+    .ll-hero {
+      padding-top: 26px;
+      margin-bottom: 60px;
+      text-align: left;
+    }
+
+    .ll-hero-title,
+    .ll-hero-dek {
+      margin-left: 0;
+      margin-right: 0;
+    }
+
+    .ll-hero-cta {
+      justify-content: flex-start;
+      margin-bottom: 44px;
+    }
+
+    .ll-hero-steps {
+      grid-template-columns: 1fr;
+      gap: 22px;
+    }
+
+    .ll-page-title {
+      font-size: 30px;
+    }
+
+    .ll-page-head-cta {
+      width: 100%;
+      justify-content: center;
+    }
+  }
+}
+
+/* ─── Печать: читалка превращается в чистый документ ─────────────────────── */
+@media print {
+  .ll-topbar,
+  .ll-footer,
+  .ll-reader-progress,
+  .ll-reader-search,
+  .ll-reader-sidebar,
+  .ll-reader-player,
+  .ll-reader-lightbox,
+  .ll-reader-export,
+  .ll-reader-text-button {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    display: block;
+  }
+
+  .ll-main {
+    padding: 0;
+    max-width: none;
+  }
+
+  .ll-reader-layout {
+    display: block;
+  }
+
+  .ll-reader-article {
+    width: 100%;
+  }
+
+  .ll-reader-timeline {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .ll-reader-sub::before {
+    display: none;
+  }
+
+  .ll-reader-section-head {
+    margin-left: 0;
+  }
+
+  .ll-reader-prose {
+    color: #000;
+  }
+}
+
+@layer components {
+  /* Заголовок-инпут не переносится: без ellipsis текст режется незаметно */
+  .ll-lec-title {
+    text-overflow: ellipsis;
+  }
+
+  /* Строка статуса готовой/упавшей лекции: статус слева, «Читать» справа */
+  .ll-status-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  /* Главное действие карточки — переход в читалку */
+  .ll-lec-read {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--font-sans);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--accent);
+    text-decoration: none;
+    border-radius: var(--r-pill);
+    transition: gap 0.16s, color 0.16s;
+  }
+
+  .ll-lec-read svg {
+    width: 14px;
+    height: 14px;
+    transition: transform 0.16s;
+  }
+
+  .ll-lec-read:hover {
+    color: var(--accent-2);
+  }
+
+  .ll-lec-read:hover svg {
+    transform: translateX(2px);
+  }
+
+  .ll-lec-read:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+}

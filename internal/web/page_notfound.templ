@@ -1,0 +1,14 @@
+package web
+
+// NotFoundPage — стилизованная страница 404 в базовом каркасе.
+// Рендерится роутером на неизвестных маршрутах вместо голого текста chi.
+templ NotFoundPage(data LayoutData) {
+	@Layout(data, nil) {
+		<div class="ll-empty ll-empty--404">
+			<div class="ll-404-code" aria-hidden="true">404</div>
+			<h1 class="ll-empty-title">Такой страницы нет</h1>
+			<p class="ll-empty-text">Возможно, лекцию сняли с публикации или в адресе опечатка.</p>
+			<a href="/hub" class="ll-btn ll-btn--accent">На витрину</a>
+		</div>
+	}
+}
