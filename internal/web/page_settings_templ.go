@@ -53,7 +53,7 @@ func SettingsPage(data LayoutData, st coreclient.CookieStatus, coreUnavailable b
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section id=\"ll-settings\" class=\"ll-settings\"><div class=\"ll-settings-head\"><div class=\"ll-settings-kicker\">Настройки</div><h1 class=\"ll-settings-title\">Настройки</h1></div><div class=\"ll-settings-card\"><h2 class=\"ll-settings-card-title\">YouTube cookies</h2><p class=\"ll-settings-card-sub\">Нужны для загрузки приватных, возрастных и региональных видео с YouTube.</p>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<section id=\"ll-settings\" class=\"ll-settings\"><div class=\"ll-settings-head\"><div class=\"ll-settings-kicker\">Администрирование</div><h1 class=\"ll-settings-title\">Настройки</h1></div><div class=\"ll-settings-card\"><h2 class=\"ll-settings-card-title\">YouTube cookies</h2><p class=\"ll-settings-card-sub\">Нужны для загрузки приватных, возрастных и региональных видео с YouTube.</p>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
