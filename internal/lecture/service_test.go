@@ -500,4 +500,78 @@ func TestService_Retry_Success(t *testing.T) {
 	// Статус должен быть processing (findByID возвращает лекцию, статус не меняется в моке,
 	// но логика должна вернуть что-то без ошибки)
 	_ = lec
+	// Регресс: аудио-ретрай не должен форсировать NoSlides — извлечения слайдов
+	// из видео там и так нет, форсинг актуален только для видео-источников.
+	if lastCreateTaskParams.NoSlides {
+		t.Error("audio retry: NoSlides не должен форсироваться в true")
+	}
+}
+
+// lastCreateTaskParams — параметры, реально дошедшие до fake core-клиента
+// в последнем вызове CreateTask (заполняется в createTask-колбэках ниже).
+var lastCreateTaskParams lecture.CreateTaskParams
+
+// TestService_Retry_VideoForcesNoSlides проверяет: retry FAILED видео-лекции
+// (SourceKind="video", есть VideoURL) → в ядро уходит NoSlides=true.
+// Причина: извлечение слайдов из видео временно отключено (та же защита,
+// что и в upload-пути, см. b5c0586) — retry не должен её обходить.
+func TestService_Retry_VideoForcesNoSlides(t *testing.T) {
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				Status:     lecture.StatusFailed,
+				VideoURL:   "https://youtube.com/watch?v=abc",
+				SourceKind: "video_url",
+			}, nil
+		},
+		setCoreTaskProcessing: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 1, nil
+		},
+	}
+	core := &mockCore{
+		createTask: func(_ context.Context, p lecture.CreateTaskParams) (string, error) {
+			lastCreateTaskParams = p
+			return "new-task-xyz", nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	if _, err := svc.Retry(context.Background(), "lec-1", "user-1"); err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if !lastCreateTaskParams.NoSlides {
+		t.Error("video retry: ожидается NoSlides=true (защита от извлечения слайдов из видео)")
+	}
+}
+
+// TestService_Retry_AudioDoesNotForceNoSlides — явный регресс-тест: аудио-источник
+// (S3Key задан, SourceKind="audio", VideoURL пуст) → NoSlides остаётся false.
+func TestService_Retry_AudioDoesNotForceNoSlides(t *testing.T) {
+	repo := &mockRepo{
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID: "lec-1", OwnerID: "user-1",
+				Status:     lecture.StatusFailed,
+				S3Key:      "lectures/user-1/audio.mp3",
+				SourceKind: "audio",
+			}, nil
+		},
+		setCoreTaskProcessing: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 1, nil
+		},
+	}
+	var got lecture.CreateTaskParams
+	core := &mockCore{
+		createTask: func(_ context.Context, p lecture.CreateTaskParams) (string, error) {
+			got = p
+			return "new-task-xyz", nil
+		},
+	}
+	svc := lecture.NewService(repo, core)
+	if _, err := svc.Retry(context.Background(), "lec-1", "user-1"); err != nil {
+		t.Fatalf("Retry: %v", err)
+	}
+	if got.NoSlides {
+		t.Error("audio retry: NoSlides должен остаться false")
+	}
 }

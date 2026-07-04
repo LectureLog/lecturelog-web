@@ -10,6 +10,23 @@ import (
 // maxTitleLen — максимальная длина заголовка лекции в символах.
 const maxTitleLen = 200
 
+// videoSlideExtractionDisabled — временный форсинг: извлечение слайдов из видео
+// отключено (защита в глубину, см. internal/upload/service.go, коммит b5c0586).
+// Дублируется здесь, а не импортируется из internal/upload, т.к. там константа
+// не экспортирована (unexported) — заводить публичный API ради одной константы
+// избыточно. Чтобы вернуть фичу — выставить false в ОБОИХ местах (upload и lecture).
+const videoSlideExtractionDisabled = true
+
+// isVideoSource определяет, является ли источник лекции видео (для форсинга
+// NoSlides при retry). SourceKind == "video"/"video_url" либо просто наличие
+// VideoURL — оба случая означают, что задача в ядре пойдёт по видео-пайплайну.
+func isVideoSource(lec Lecture) bool {
+	if lec.VideoURL != "" {
+		return true
+	}
+	return lec.SourceKind == "video" || lec.SourceKind == "video_url"
+}
+
 // List возвращает лекции пользователя ownerID, упорядоченные по дате обновления.
 func (s *Service) List(ctx context.Context, ownerID string) ([]Lecture, error) {
 	lectures, err := s.repo.ListByOwner(ctx, ownerID)
@@ -157,11 +174,14 @@ func (s *Service) Retry(ctx context.Context, lectureID, ownerID string) (Lecture
 		return Lecture{}, ErrNoRetrySource
 	}
 
-	// Шаг 3: строим параметры и создаём задачу в ядре
+	// Шаг 3: строим параметры и создаём задачу в ядре.
+	// NoSlides форсируется в true для видео-источников — извлечение слайдов
+	// из видео временно отключено, retry не должен обходить эту защиту.
 	params := CreateTaskParams{
 		S3Key:    lec.S3Key,
 		VideoURL: lec.VideoURL,
 		Media:    lec.SourceKind,
+		NoSlides: videoSlideExtractionDisabled && isVideoSource(*lec),
 	}
 	newTaskID, err := s.core.CreateTask(ctx, params)
 	if err != nil {

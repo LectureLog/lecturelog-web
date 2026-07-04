@@ -443,6 +443,7 @@ func (a *coreTasksAdapter) CreateTask(ctx context.Context, p lecture.CreateTaskP
 		S3Key:    p.S3Key,
 		VideoURL: p.VideoURL,
 		Media:    p.Media,
+		NoSlides: p.NoSlides,
 	})
 }
 
