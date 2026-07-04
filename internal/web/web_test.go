@@ -436,6 +436,78 @@ func TestUploadPage_ExtractToggle(t *testing.T) {
 	}
 }
 
+// TestUploadPage_ExtractToggleDisabled проверяет, что тумблер «Извлекать слайды из видео»
+// временно заблокирован: input disabled и не checked, есть пояснение про недоступность,
+// а контрол has_pdf при этом не тронут.
+func TestUploadPage_ExtractToggleDisabled(t *testing.T) {
+	html := renderUploadPage(t)
+
+	inputs := extractSlidesInputs(t, html)
+	if len(inputs) != 2 {
+		t.Fatalf("ожидается 2 инпута extract_slides (файл-панель и url-панель), найдено %d", len(inputs))
+	}
+	for i, input := range inputs {
+		if !strings.Contains(input, "disabled") {
+			t.Errorf("инпут extract_slides #%d должен быть disabled: %s", i, input)
+		}
+		if strings.Contains(input, "checked") {
+			t.Errorf("инпут extract_slides #%d не должен быть checked: %s", i, input)
+		}
+	}
+
+	if !strings.Contains(html, "Временно недоступно") || !strings.Contains(html, "следующем обновлении") {
+		t.Error("ожидается пояснение о временной недоступности тумблера")
+	}
+
+	hasPDFInputs := extractHasPDFInputs(t, html)
+	if len(hasPDFInputs) != 2 {
+		t.Fatalf("ожидается 2 инпута has_pdf, найдено %d", len(hasPDFInputs))
+	}
+	for i, input := range hasPDFInputs {
+		if strings.Contains(input, "disabled") {
+			t.Errorf("инпут has_pdf #%d не должен быть disabled: %s", i, input)
+		}
+	}
+}
+
+// extractSlidesInputs достаёт содержимое всех тегов <input ... name="extract_slides" ...>.
+func extractSlidesInputs(t *testing.T, html string) []string {
+	t.Helper()
+	return extractInputsByName(t, html, "extract_slides")
+}
+
+// extractHasPDFInputs достаёт содержимое всех тегов <input ... name="has_pdf" ...>.
+func extractHasPDFInputs(t *testing.T, html string) []string {
+	t.Helper()
+	return extractInputsByName(t, html, "has_pdf")
+}
+
+// extractInputsByName ищет в HTML все теги <input ...> с заданным атрибутом name.
+func extractInputsByName(t *testing.T, html, name string) []string {
+	t.Helper()
+	var result []string
+	needle := `name="` + name + `"`
+	rest := html
+	for {
+		idx := strings.Index(rest, needle)
+		if idx == -1 {
+			break
+		}
+		start := strings.LastIndex(rest[:idx], "<input")
+		if start == -1 {
+			t.Fatalf("не найден открывающий тег <input перед %q", needle)
+		}
+		end := strings.Index(rest[idx:], ">")
+		if end == -1 {
+			t.Fatalf("не найден закрывающий > для тега с %q", needle)
+		}
+		tag := rest[start : idx+end+1]
+		result = append(result, tag)
+		rest = rest[idx+end+1:]
+	}
+	return result
+}
+
 func TestUploadPage_CSRFData(t *testing.T) {
 	html := renderUploadPage(t)
 
