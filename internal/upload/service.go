@@ -100,7 +100,7 @@ func (s *Service) ConfirmFileUpload(ctx context.Context, userID string, in Confi
 	taskID, err := s.core.CreateTask(ctx, coreclient.CreateTaskParams{
 		S3Key:    in.S3Key,
 		Media:    media,
-		NoSlides: noSlides(in.HasPDF, in.ExtractSlides),
+		NoSlides: noSlides(in.HasPDF, extractSlidesEffective(in.ExtractSlides)),
 	})
 	if err != nil {
 		return "", err
@@ -124,7 +124,7 @@ func (s *Service) CreateYouTube(ctx context.Context, userID string, in YouTubeIn
 	// не принимает файл слайдов; HasPDF только отключает извлечение слайдов.
 	taskID, err := s.core.CreateTask(ctx, coreclient.CreateTaskParams{
 		VideoURL: in.URL,
-		NoSlides: noSlides(in.HasPDF, in.ExtractSlides),
+		NoSlides: noSlides(in.HasPDF, extractSlidesEffective(in.ExtractSlides)),
 	})
 	if err != nil {
 		return "", err
@@ -137,6 +137,21 @@ func (s *Service) CreateYouTube(ctx context.Context, userID string, in YouTubeIn
 		VideoURL:   in.URL,
 		CoreTaskID: taskID,
 	})
+}
+
+// videoSlideExtractionDisabled — временный форсинг: извлечение слайдов из видео
+// в ядре отключено (тихая деградация), поэтому веб не должен передавать запрос
+// на него в core, даже если клиент прислал ExtractSlides=true (защита в глубину
+// на случай обхода фронтенда прямым POST). Чтобы вернуть фичу, установить false.
+const videoSlideExtractionDisabled = true
+
+// extractSlidesEffective — единая точка правды: приводит входящий ExtractSlides
+// к фактическому значению с учётом форсированного отключения видео-извлечения.
+func extractSlidesEffective(requested bool) bool {
+	if videoSlideExtractionDisabled {
+		return false
+	}
+	return requested
 }
 
 func noSlides(hasPDF, extractSlides bool) bool {

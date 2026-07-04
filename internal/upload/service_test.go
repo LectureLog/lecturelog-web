@@ -196,8 +196,10 @@ func TestConfirmFileUpload_ExtractToggleOff(t *testing.T) {
 	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: false}, true)
 }
 
-func TestConfirmFileUpload_ExtractOn(t *testing.T) {
-	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: true}, false)
+// Видео-извлечение слайдов временно форсированно выключено (защита в глубину),
+// поэтому ExtractSlides:true всё равно должен давать NoSlides:true.
+func TestConfirmFileUpload_ExtractOnStillForcesNoSlides(t *testing.T) {
+	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: true}, true)
 }
 
 func TestCreateYouTube_Success(t *testing.T) {
@@ -212,8 +214,8 @@ func TestCreateYouTube_Success(t *testing.T) {
 			if p.Media != "" {
 				t.Fatalf("Media = %q, want empty", p.Media)
 			}
-			if p.NoSlides {
-				t.Fatal("NoSlides = true, want false")
+			if !p.NoSlides {
+				t.Fatal("NoSlides = false, want true (видео-извлечение форсированно выключено)")
 			}
 			return "task-yt", nil
 		},
@@ -255,6 +257,18 @@ func TestCreateYouTube_Success(t *testing.T) {
 	if len(order) != 2 || order[0] != "core" || order[1] != "repo" {
 		t.Fatalf("call order = %v, want [core repo]", order)
 	}
+}
+
+func TestCreateYouTube_ExtractSlidesForcedOff(t *testing.T) {
+	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: true}, true)
+}
+
+func TestCreateYouTube_PDFForcesNoSlides(t *testing.T) {
+	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: true, ExtractSlides: true}, true)
+}
+
+func TestCreateYouTube_NoSlidesAtAll(t *testing.T) {
+	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: false}, true)
 }
 
 func TestCreateYouTube_InvalidURL(t *testing.T) {
@@ -300,6 +314,30 @@ func assertConfirmNoSlides(t *testing.T, input ConfirmInput, want bool) {
 
 	if _, err := service.ConfirmFileUpload(context.Background(), "user-1", input); err != nil {
 		t.Fatalf("ConfirmFileUpload() error = %v, want nil", err)
+	}
+}
+
+func assertYouTubeNoSlides(t *testing.T, input YouTubeInput, want bool) {
+	t.Helper()
+
+	input.URL = "https://youtu.be/video"
+	core := &mockCore{
+		createTaskFunc: func(ctx context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.NoSlides != want {
+				t.Fatalf("NoSlides = %v, want %v", p.NoSlides, want)
+			}
+			return "task-yt", nil
+		},
+	}
+	repo := &mockRepo{
+		createLectureFunc: func(ctx context.Context, p CreateLectureParams) (string, error) {
+			return "lecture-yt", nil
+		},
+	}
+	service := NewService(core, repo, newTestServiceSigner(), time.Hour)
+
+	if _, err := service.CreateYouTube(context.Background(), "user-1", input); err != nil {
+		t.Fatalf("CreateYouTube() error = %v, want nil", err)
 	}
 }
 

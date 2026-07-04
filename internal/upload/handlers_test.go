@@ -189,8 +189,8 @@ func TestConfirm_Success(t *testing.T) {
 			if p.Media != "video" {
 				t.Fatalf("Media = %q, want video", p.Media)
 			}
-			if p.NoSlides {
-				t.Fatal("NoSlides = true, want false")
+			if !p.NoSlides {
+				t.Fatal("NoSlides = false, want true (видео-извлечение форсированно выключено)")
 			}
 			return "task-confirm", nil
 		},
@@ -246,6 +246,14 @@ func TestConfirm_HasPDFForcesNoSlides(t *testing.T) {
 	}, true)
 }
 
+// Видео-извлечение слайдов временно форсированно выключено (защита в глубину),
+// поэтому даже включённый extract_slides без has_pdf должен давать no_slides=true.
+func TestConfirm_ExtractSlidesCheckedStillForcesNoSlides(t *testing.T) {
+	assertConfirmNoSlidesFromForm(t, url.Values{
+		"extract_slides": {"on"},
+	}, true)
+}
+
 func TestConfirm_BadToken(t *testing.T) {
 	form := url.Values{
 		"token":  {"bad-token"},
@@ -269,6 +277,9 @@ func TestYouTube_Success(t *testing.T) {
 		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
 			if p.VideoURL != videoURL {
 				t.Fatalf("VideoURL = %q, want %s", p.VideoURL, videoURL)
+			}
+			if !p.NoSlides {
+				t.Fatal("NoSlides = false, want true (видео-извлечение форсированно выключено)")
 			}
 			return "task-youtube", nil
 		},
