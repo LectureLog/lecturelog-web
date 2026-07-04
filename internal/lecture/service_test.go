@@ -483,8 +483,12 @@ func TestService_Retry_Success(t *testing.T) {
 			return 1, nil
 		},
 	}
+	// Захватываем параметры локально (не через пакетный глобал), чтобы ассерт
+	// наблюдал именно этот прогон и был устойчив к порядку тестов (-shuffle).
+	var gotParams lecture.CreateTaskParams
 	core := &mockCore{
 		createTask: func(_ context.Context, p lecture.CreateTaskParams) (string, error) {
+			gotParams = p
 			return "new-task-xyz", nil
 		},
 	}
@@ -502,7 +506,7 @@ func TestService_Retry_Success(t *testing.T) {
 	_ = lec
 	// Регресс: аудио-ретрай не должен форсировать NoSlides — извлечения слайдов
 	// из видео там и так нет, форсинг актуален только для видео-источников.
-	if lastCreateTaskParams.NoSlides {
+	if gotParams.NoSlides {
 		t.Error("audio retry: NoSlides не должен форсироваться в true")
 	}
 }
