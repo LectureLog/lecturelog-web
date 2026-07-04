@@ -11,6 +11,8 @@ import (
 	"github.com/LectureLog/lecturelog-web/internal/coreclient"
 	"github.com/LectureLog/lecturelog-web/internal/web"
 	"github.com/go-chi/chi/v5"
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 )
 
 // renderLayout — вспомогательная функция: рендерит Layout в строку.
@@ -440,72 +442,111 @@ func TestUploadPage_ExtractToggle(t *testing.T) {
 // временно заблокирован: input disabled и не checked, есть пояснение про недоступность,
 // а контрол has_pdf при этом не тронут.
 func TestUploadPage_ExtractToggleDisabled(t *testing.T) {
-	html := renderUploadPage(t)
+	htmlStr := renderUploadPage(t)
 
-	inputs := extractSlidesInputs(t, html)
-	if len(inputs) != 2 {
-		t.Fatalf("ожидается 2 инпута extract_slides (файл-панель и url-панель), найдено %d", len(inputs))
-	}
-	for i, input := range inputs {
-		if !strings.Contains(input, "disabled") {
-			t.Errorf("инпут extract_slides #%d должен быть disabled: %s", i, input)
-		}
-		if strings.Contains(input, "checked") {
-			t.Errorf("инпут extract_slides #%d не должен быть checked: %s", i, input)
-		}
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		t.Fatalf("html.Parse: %v", err)
 	}
 
-	if !strings.Contains(html, "Временно недоступно") || !strings.Contains(html, "следующем обновлении") {
+	panels := panelSections(t, doc)
+	for _, panel := range []string{"file", "url"} {
+		root, ok := panels[panel]
+		if !ok {
+			t.Fatalf("не найдена секция data-panel=%q", panel)
+		}
+
+		extractInputs := inputsByName(root, "extract_slides")
+		if len(extractInputs) != 1 {
+			t.Fatalf("панель %q: ожидается 1 инпут extract_slides, найдено %d", panel, len(extractInputs))
+		}
+		input := extractInputs[0]
+
+		// (а) должен присутствовать именно boolean-атрибут disabled как отдельный токен,
+		// а не подстрока внутри aria-disabled — golang.org/x/net/html парсит атрибуты
+		// как отдельные пары ключ/значение, поэтому "disabled" и "aria-disabled" не путаются.
+		if !hasAttr(input, "disabled") {
+			t.Errorf("панель %q: инпут extract_slides должен иметь boolean-атрибут disabled", panel)
+		}
+		// (б) для доступности должен быть выставлен aria-disabled="true".
+		if attrVal(input, "aria-disabled") != "true" {
+			t.Errorf("панель %q: инпут extract_slides должен иметь aria-disabled=\"true\"", panel)
+		}
+		// (в) не должен быть отмечен как checked.
+		if hasAttr(input, "checked") {
+			t.Errorf("панель %q: инпут extract_slides не должен быть checked", panel)
+		}
+
+		hasPDFInputs := inputsByName(root, "has_pdf")
+		if len(hasPDFInputs) != 1 {
+			t.Fatalf("панель %q: ожидается 1 инпут has_pdf, найдено %d", panel, len(hasPDFInputs))
+		}
+		if hasAttr(hasPDFInputs[0], "disabled") {
+			t.Errorf("панель %q: инпут has_pdf не должен быть disabled", panel)
+		}
+	}
+
+	if !strings.Contains(htmlStr, "Временно недоступно") || !strings.Contains(htmlStr, "следующем обновлении") {
 		t.Error("ожидается пояснение о временной недоступности тумблера")
 	}
-
-	hasPDFInputs := extractHasPDFInputs(t, html)
-	if len(hasPDFInputs) != 2 {
-		t.Fatalf("ожидается 2 инпута has_pdf, найдено %d", len(hasPDFInputs))
-	}
-	for i, input := range hasPDFInputs {
-		if strings.Contains(input, "disabled") {
-			t.Errorf("инпут has_pdf #%d не должен быть disabled: %s", i, input)
-		}
-	}
 }
 
-// extractSlidesInputs достаёт содержимое всех тегов <input ... name="extract_slides" ...>.
-func extractSlidesInputs(t *testing.T, html string) []string {
+// panelSections обходит дерево документа и возвращает корневые узлы секций
+// с атрибутом data-panel, ключ — значение атрибута (например, "file" или "url").
+func panelSections(t *testing.T, doc *html.Node) map[string]*html.Node {
 	t.Helper()
-	return extractInputsByName(t, html, "extract_slides")
-}
-
-// extractHasPDFInputs достаёт содержимое всех тегов <input ... name="has_pdf" ...>.
-func extractHasPDFInputs(t *testing.T, html string) []string {
-	t.Helper()
-	return extractInputsByName(t, html, "has_pdf")
-}
-
-// extractInputsByName ищет в HTML все теги <input ...> с заданным атрибутом name.
-func extractInputsByName(t *testing.T, html, name string) []string {
-	t.Helper()
-	var result []string
-	needle := `name="` + name + `"`
-	rest := html
-	for {
-		idx := strings.Index(rest, needle)
-		if idx == -1 {
-			break
+	result := make(map[string]*html.Node)
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			if v := attrVal(n, "data-panel"); v != "" {
+				result[v] = n
+				// внутрь секции не заходим — вложенных data-panel в разметке нет.
+			}
 		}
-		start := strings.LastIndex(rest[:idx], "<input")
-		if start == -1 {
-			t.Fatalf("не найден открывающий тег <input перед %q", needle)
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
 		}
-		end := strings.Index(rest[idx:], ">")
-		if end == -1 {
-			t.Fatalf("не найден закрывающий > для тега с %q", needle)
-		}
-		tag := rest[start : idx+end+1]
-		result = append(result, tag)
-		rest = rest[idx+end+1:]
 	}
+	walk(doc)
 	return result
+}
+
+// inputsByName ищет в поддереве все теги <input> с заданным атрибутом name.
+func inputsByName(root *html.Node, name string) []*html.Node {
+	var result []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Input && attrVal(n, "name") == name {
+			result = append(result, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	return result
+}
+
+// hasAttr сообщает, присутствует ли у узла атрибут с данным ключом (значение не важно —
+// это применимо к boolean-атрибутам вроде disabled/checked).
+func hasAttr(n *html.Node, key string) bool {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return true
+		}
+	}
+	return false
+}
+
+// attrVal возвращает значение атрибута узла или пустую строку, если атрибута нет.
+func attrVal(n *html.Node, key string) string {
+	for _, a := range n.Attr {
+		if a.Key == key {
+			return a.Val
+		}
+	}
+	return ""
 }
 
 func TestUploadPage_CSRFData(t *testing.T) {
