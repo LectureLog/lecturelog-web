@@ -203,10 +203,12 @@
 
     function currentFileOptions() {
       var hasPDF = root.querySelector('[data-panel="file"] [data-has-pdf]');
-      var extract = root.querySelector('[data-panel="file"] [data-extract-slides]');
       return {
         hasPDF: hasPDF && hasPDF.checked,
-        extractSlides: extract && extract.checked && !(hasPDF && hasPDF.checked)
+        // извлечение слайдов из видео временно отключено (см. фичу disable-video-slides-toggle):
+        // тумблер задизейблен на разметке, здесь явно фиксируем false, чтобы форма
+        // никогда не отправляла extract_slides=on
+        extractSlides: false
       };
     }
 
@@ -286,11 +288,12 @@
           input.checked = checked;
         }
       });
+      // извлечение слайдов из видео временно отключено (см. фичу disable-video-slides-toggle):
+      // тумблер extract_slides должен всегда оставаться выключенным и заблокированным,
+      // независимо от состояния has_pdf — JS не должен его "оживлять"
       extractInputs.forEach(function (input) {
-        input.disabled = checked;
-        if (checked) {
-          input.checked = false;
-        }
+        input.disabled = true;
+        input.checked = false;
       });
     }
 
