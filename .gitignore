@@ -13,3 +13,6 @@ internal/coreclient/openapi.normalized.json
 # Бинарник дизайн-превью (go build ./cmd/preview) — не коммитить,
 # иначе Tailwind-автодетект подхватывает мусорные классы из его строк.
 /preview
+
+# SDD-оркестрация (внутренние артефакты)
+.superpowers/
