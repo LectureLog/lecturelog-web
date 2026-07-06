@@ -196,10 +196,8 @@ func TestConfirmFileUpload_ExtractToggleOff(t *testing.T) {
 	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: false}, true)
 }
 
-// Видео-извлечение слайдов временно форсированно выключено (защита в глубину),
-// поэтому ExtractSlides:true всё равно должен давать NoSlides:true.
-func TestConfirmFileUpload_ExtractOnStillForcesNoSlides(t *testing.T) {
-	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: true}, true)
+func TestConfirmFileUpload_ExtractOn(t *testing.T) {
+	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: true}, false)
 }
 
 func TestCreateYouTube_Success(t *testing.T) {
@@ -214,8 +212,8 @@ func TestCreateYouTube_Success(t *testing.T) {
 			if p.Media != "" {
 				t.Fatalf("Media = %q, want empty", p.Media)
 			}
-			if !p.NoSlides {
-				t.Fatal("NoSlides = false, want true (видео-извлечение форсированно выключено)")
+			if p.NoSlides {
+				t.Fatal("NoSlides = true, want false")
 			}
 			return "task-yt", nil
 		},
@@ -259,8 +257,8 @@ func TestCreateYouTube_Success(t *testing.T) {
 	}
 }
 
-func TestCreateYouTube_ExtractSlidesForcedOff(t *testing.T) {
-	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: true}, true)
+func TestCreateYouTube_ExtractSlidesOn(t *testing.T) {
+	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: true}, false)
 }
 
 func TestCreateYouTube_PDFForcesNoSlides(t *testing.T) {

@@ -79,11 +79,7 @@ type CreateTaskParams struct {
 	VideoURL string
 	// Media — тип медиа (audio/video/video_url).
 	Media string
-	// NoSlides — отключить извлечение слайдов в ядре. Используется для
-	// временного форсинга отключения извлечения слайдов из видео (см.
-	// videoSlideExtractionDisabled в service.go) — та же защита, что и в
-	// internal/upload (b5c0586), продублирована здесь, т.к. пакет upload
-	// её не экспортирует.
+	// NoSlides — отключить извлечение слайдов в ядре.
 	NoSlides bool
 }
 

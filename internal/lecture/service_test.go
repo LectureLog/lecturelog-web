@@ -511,15 +511,9 @@ func TestService_Retry_Success(t *testing.T) {
 	}
 }
 
-// lastCreateTaskParams — параметры, реально дошедшие до fake core-клиента
-// в последнем вызове CreateTask (заполняется в createTask-колбэках ниже).
-var lastCreateTaskParams lecture.CreateTaskParams
-
-// TestService_Retry_VideoForcesNoSlides проверяет: retry FAILED видео-лекции
-// (SourceKind="video", есть VideoURL) → в ядро уходит NoSlides=true.
-// Причина: извлечение слайдов из видео временно отключено (та же защита,
-// что и в upload-пути, см. b5c0586) — retry не должен её обходить.
-func TestService_Retry_VideoForcesNoSlides(t *testing.T) {
+// TestService_Retry_VideoDoesNotForceNoSlides проверяет: retry FAILED видео-лекции
+// не должен сам гасить извлечение кадров из видео.
+func TestService_Retry_VideoDoesNotForceNoSlides(t *testing.T) {
 	repo := &mockRepo{
 		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
 			return &lecture.Lecture{
@@ -533,9 +527,10 @@ func TestService_Retry_VideoForcesNoSlides(t *testing.T) {
 			return 1, nil
 		},
 	}
+	var got lecture.CreateTaskParams
 	core := &mockCore{
 		createTask: func(_ context.Context, p lecture.CreateTaskParams) (string, error) {
-			lastCreateTaskParams = p
+			got = p
 			return "new-task-xyz", nil
 		},
 	}
@@ -543,8 +538,8 @@ func TestService_Retry_VideoForcesNoSlides(t *testing.T) {
 	if _, err := svc.Retry(context.Background(), "lec-1", "user-1"); err != nil {
 		t.Fatalf("Retry: %v", err)
 	}
-	if !lastCreateTaskParams.NoSlides {
-		t.Error("video retry: ожидается NoSlides=true (защита от извлечения слайдов из видео)")
+	if got.NoSlides {
+		t.Error("video retry: NoSlides должен остаться false")
 	}
 }
 

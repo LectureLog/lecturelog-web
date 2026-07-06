@@ -438,10 +438,9 @@ func TestUploadPage_ExtractToggle(t *testing.T) {
 	}
 }
 
-// TestUploadPage_ExtractToggleDisabled проверяет, что тумблер «Извлекать слайды из видео»
-// временно заблокирован: input disabled и не checked, есть пояснение про недоступность,
-// а контрол has_pdf при этом не тронут.
-func TestUploadPage_ExtractToggleDisabled(t *testing.T) {
+// TestUploadPage_ExtractToggleEnabled проверяет, что тумблер «Извлекать слайды из видео»
+// доступен и включён по умолчанию, а контрол has_pdf при этом не тронут.
+func TestUploadPage_ExtractToggleEnabled(t *testing.T) {
 	htmlStr := renderUploadPage(t)
 
 	doc, err := html.Parse(strings.NewReader(htmlStr))
@@ -462,19 +461,14 @@ func TestUploadPage_ExtractToggleDisabled(t *testing.T) {
 		}
 		input := extractInputs[0]
 
-		// (а) должен присутствовать именно boolean-атрибут disabled как отдельный токен,
-		// а не подстрока внутри aria-disabled — golang.org/x/net/html парсит атрибуты
-		// как отдельные пары ключ/значение, поэтому "disabled" и "aria-disabled" не путаются.
-		if !hasAttr(input, "disabled") {
-			t.Errorf("панель %q: инпут extract_slides должен иметь boolean-атрибут disabled", panel)
+		if hasAttr(input, "disabled") {
+			t.Errorf("панель %q: инпут extract_slides не должен иметь boolean-атрибут disabled", panel)
 		}
-		// (б) для доступности должен быть выставлен aria-disabled="true".
-		if attrVal(input, "aria-disabled") != "true" {
-			t.Errorf("панель %q: инпут extract_slides должен иметь aria-disabled=\"true\"", panel)
+		if attrVal(input, "aria-disabled") == "true" {
+			t.Errorf("панель %q: инпут extract_slides не должен иметь aria-disabled=\"true\"", panel)
 		}
-		// (в) не должен быть отмечен как checked.
-		if hasAttr(input, "checked") {
-			t.Errorf("панель %q: инпут extract_slides не должен быть checked", panel)
+		if !hasAttr(input, "checked") {
+			t.Errorf("панель %q: инпут extract_slides должен быть checked", panel)
 		}
 
 		hasPDFInputs := inputsByName(root, "has_pdf")
@@ -486,8 +480,11 @@ func TestUploadPage_ExtractToggleDisabled(t *testing.T) {
 		}
 	}
 
-	if !strings.Contains(htmlStr, "Временно недоступно") || !strings.Contains(htmlStr, "следующем обновлении") {
-		t.Error("ожидается пояснение о временной недоступности тумблера")
+	if strings.Contains(htmlStr, "Временно недоступно") || strings.Contains(htmlStr, "следующем обновлении") {
+		t.Error("не ожидается пояснение о временной недоступности тумблера")
+	}
+	if !strings.Contains(htmlStr, "Найдём кадры со слайдами") {
+		t.Error("ожидается описание включённого извлечения слайдов из видео")
 	}
 }
 
