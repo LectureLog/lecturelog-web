@@ -65,12 +65,27 @@ type ViewSection struct {
 }
 
 // ViewSubtopic — подтема с материалом, медиа и слайдами.
+// Blocks — контент, порезанный маркерами <!-- slide:N --> из ядра: кадры
+// встают между HTML-фрагментами. SlideURLs — кадры без маркера (галерея).
 type ViewSubtopic struct {
 	Number      string
 	Title       string
 	Media       *ViewMedia
 	SlideURLs   []string
+	Blocks      []ViewBlock
 	ContentHTML string
+}
+
+// ViewBlock — кусок подтемы: либо HTML-фрагмент, либо кадр (ровно одно из двух).
+type ViewBlock struct {
+	HTML  string
+	Slide *ViewSlide
+}
+
+// ViewSlide — кадр, вставленный внутрь текста.
+type ViewSlide struct {
+	URL string
+	Num int
 }
 
 // ViewMedia — готовое для показа медиа с временной ссылкой.

@@ -30,6 +30,19 @@ type ReaderSubtopicVM struct {
 	ContentHTML string
 	Media       *ReaderMediaVM
 	SlideURLs   []string
+	Blocks      []ReaderBlockVM
+}
+
+// ReaderBlockVM — фрагмент подтемы: HTML-кусок текста или инлайн-кадр.
+type ReaderBlockVM struct {
+	HTML  string
+	Slide *ReaderSlideVM
+}
+
+// ReaderSlideVM — кадр, вставленный между абзацами по маркеру ядра.
+type ReaderSlideVM struct {
+	URL string
+	Num int
 }
 
 // ReaderMediaVM — медиафрагмент подтемы.
@@ -103,10 +116,26 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 										if sub.Media != nil {
 											@ReaderMedia(*sub.Media)
 										}
-										<div class="ll-reader-prose">
-											// ContentHTML уже санитизирован goldmark в B2 (без unsafe-HTML) — Raw безопасен
-											@templ.Raw(sub.ContentHTML)
-										</div>
+										if len(sub.Blocks) > 0 {
+											for _, part := range sub.Blocks {
+												if part.Slide != nil {
+													<figure class="ll-reader-slide ll-reader-slide--inline">
+														<img src={ part.Slide.URL } alt={ fmt.Sprintf("Слайд %d: %s", part.Slide.Num, sub.Title) } loading="lazy"/>
+														<figcaption>{ fmt.Sprintf("Слайд %d", part.Slide.Num) }</figcaption>
+													</figure>
+												} else if part.HTML != "" {
+													<div class="ll-reader-prose">
+														// HTML уже санитизирован goldmark в reader-сервисе (без unsafe-HTML) — Raw безопасен
+														@templ.Raw(part.HTML)
+													</div>
+												}
+											}
+										} else {
+											<div class="ll-reader-prose">
+												// ContentHTML уже санитизирован goldmark в B2 (без unsafe-HTML) — Raw безопасен
+												@templ.Raw(sub.ContentHTML)
+											</div>
+										}
 										if len(sub.SlideURLs) > 0 {
 											<div class={ "ll-reader-slides", templ.KV("ll-reader-slides--multi", len(sub.SlideURLs) > 1) }>
 												for slideIndex, slideURL := range sub.SlideURLs {

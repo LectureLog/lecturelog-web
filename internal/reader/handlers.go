@@ -108,6 +108,13 @@ func readerToVM(view ReaderView) web.ReaderVM {
 		sectionVM := web.ReaderSectionVM{Number: section.Number, Title: section.Title, Subtopics: make([]web.ReaderSubtopicVM, 0, len(section.Subtopics))}
 		for _, subtopic := range section.Subtopics {
 			subtopicVM := web.ReaderSubtopicVM{Number: subtopic.Number, Title: subtopic.Title, ContentHTML: subtopic.ContentHTML, SlideURLs: subtopic.SlideURLs}
+			for _, block := range subtopic.Blocks {
+				blockVM := web.ReaderBlockVM{HTML: block.HTML}
+				if block.Slide != nil {
+					blockVM.Slide = &web.ReaderSlideVM{URL: block.Slide.URL, Num: block.Slide.Num}
+				}
+				subtopicVM.Blocks = append(subtopicVM.Blocks, blockVM)
+			}
 			if subtopic.Media != nil {
 				subtopicVM.Media = &web.ReaderMediaVM{Kind: subtopic.Media.Kind, Start: subtopic.Media.Start, End: subtopic.Media.End, URL: subtopic.Media.URL}
 			}

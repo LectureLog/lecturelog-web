@@ -90,7 +90,11 @@ type Subtopic struct {
 	Title     string   `json:"title"`
 	Media     *Media   `json:"media"`
 	SlideKeys []string `json:"slide_keys"`
-	ContentMD string   `json:"content_md"`
+	// SlideNums[i] — глобальный номер кадра для SlideKeys[i]; тем же номером N
+	// ядро метит позицию кадра в content_md маркером <!-- slide:N -->.
+	// В старых конспектах поля нет — рендер падает в галерею.
+	SlideNums []int  `json:"slide_nums"`
+	ContentMD string `json:"content_md"`
 }
 
 // Media описывает фрагмент аудио или видео.
