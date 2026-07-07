@@ -53,6 +53,49 @@ func TestReaderPage_Render(t *testing.T) {
 	}
 }
 
+// TestReaderPage_RenderBlocks проверяет инлайн-кадры между HTML-блоками,
+// которые reader-сервис построил из маркеров <!-- slide:N -->.
+func TestReaderPage_RenderBlocks(t *testing.T) {
+	vm := web.ReaderVM{
+		LectureID:   "lecture-42",
+		Title:       "Тестовая лекция",
+		SourceTitle: "Источник",
+		SourceKind:  "video",
+		Sections: []web.ReaderSectionVM{{
+			Number: "01",
+			Title:  "Раздел",
+			Subtopics: []web.ReaderSubtopicVM{{
+				Number: "1.1",
+				Title:  "Подтема",
+				Blocks: []web.ReaderBlockVM{
+					{HTML: "<p>До кадра</p>"},
+					{Slide: &web.ReaderSlideVM{URL: "https://cdn.example/inline.png", Num: 3}},
+					{HTML: "<p>После кадра</p>"},
+				},
+			}},
+		}},
+	}
+
+	var b bytes.Buffer
+	if err := web.ReaderPage(web.LayoutData{Title: vm.Title}, vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("ReaderPage.Render: %v", err)
+	}
+	html := b.String()
+
+	before := strings.Index(html, "<p>До кадра</p>")
+	img := strings.Index(html, "https://cdn.example/inline.png")
+	after := strings.Index(html, "<p>После кадра</p>")
+	if before == -1 || img == -1 || after == -1 {
+		t.Fatalf("не все блоки попали в рендер: before=%d img=%d after=%d", before, img, after)
+	}
+	if !(before < img && img < after) {
+		t.Errorf("кадр должен стоять между абзацами: before=%d img=%d after=%d", before, img, after)
+	}
+	if strings.Contains(html, "Слайд 1 из") {
+		t.Error("инлайн-кадр не должен дублироваться в галерее")
+	}
+}
+
 // TestReaderPage_RenderEmptyData проверяет рендер без необязательных данных читалки.
 func TestReaderPage_RenderEmptyData(t *testing.T) {
 	tests := []struct {

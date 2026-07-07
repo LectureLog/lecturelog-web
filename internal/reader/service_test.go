@@ -165,3 +165,81 @@ func validStructure(t *testing.T) []byte {
 	}
 	return b
 }
+
+func TestServiceLoadSplitsContentBySlideMarkers(t *testing.T) {
+	// Маркер <!-- slide:N --> режет контент на блоки, кадр встаёт между ними
+	// (URL по N через slide_nums/slide_keys); кадры без маркера — в SlideURLs
+	// (галерея, как раньше).
+	structure := []byte(`{
+	  "source": {"title": "Л", "kind": "video", "duration": 60},
+	  "sections": [{"title": "С", "subtopics": [{
+	    "title": "П",
+	    "media": null,
+	    "slide_keys": ["results/t/slide-1.png", "results/t/slide-2.png"],
+	    "slide_nums": [3, 4],
+	    "content_md": "До.\n\n<!-- slide:3 -->\n\nПосле."
+	  }]}]
+	}`)
+	store := &fakeObjectStore{data: structure}
+	presigner := &fakePresigner{urls: map[string]string{
+		"results/t/slide-1.png": "https://storage.example/s1",
+		"results/t/slide-2.png": "https://storage.example/s2",
+	}}
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "private", CoreTaskID: "t"}},
+		store, presigner, fakeRenderer{}, time.Hour,
+	)
+
+	view, err := service.Load(context.Background(), "l", "o")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	sub := view.Sections[0].Subtopics[0]
+	want := []ViewBlock{
+		{HTML: "<p>До.</p>"},
+		{Slide: &ViewSlide{URL: "https://storage.example/s1", Num: 3}},
+		{HTML: "<p>После.</p>"},
+	}
+	if len(sub.Blocks) != len(want) {
+		t.Fatalf("Blocks = %#v, want %#v", sub.Blocks, want)
+	}
+	for i := range want {
+		if sub.Blocks[i].HTML != want[i].HTML {
+			t.Errorf("Blocks[%d].HTML = %q, want %q", i, sub.Blocks[i].HTML, want[i].HTML)
+		}
+		if (sub.Blocks[i].Slide == nil) != (want[i].Slide == nil) {
+			t.Fatalf("Blocks[%d].Slide = %#v, want %#v", i, sub.Blocks[i].Slide, want[i].Slide)
+		}
+		if want[i].Slide != nil && *sub.Blocks[i].Slide != *want[i].Slide {
+			t.Errorf("Blocks[%d].Slide = %#v, want %#v", i, sub.Blocks[i].Slide, want[i].Slide)
+		}
+	}
+	// Кадр 4 без маркера -> остаётся в галерее.
+	if len(sub.SlideURLs) != 1 || sub.SlideURLs[0] != "https://storage.example/s2" {
+		t.Errorf("SlideURLs = %#v, want только s2", sub.SlideURLs)
+	}
+}
+
+func TestServiceLoadWithoutMarkersKeepsGallery(t *testing.T) {
+	// Старые конспекты без маркеров: один HTML-блок, все кадры в галерее.
+	store := &fakeObjectStore{data: validStructure(t)}
+	presigner := &fakePresigner{urls: map[string]string{
+		"results/task-1/clip.mp4":    "https://storage.example/clip",
+		"results/task-1/slide-1.png": "https://storage.example/slide",
+	}}
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "private", CoreTaskID: "task-1"}},
+		store, presigner, fakeRenderer{}, time.Hour,
+	)
+	view, err := service.Load(context.Background(), "l", "o")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	sub := view.Sections[0].Subtopics[0]
+	if len(sub.Blocks) != 1 || sub.Blocks[0].HTML != "<p># План\n\n**Важное**</p>" || sub.Blocks[0].Slide != nil {
+		t.Errorf("Blocks = %#v", sub.Blocks)
+	}
+	if len(sub.SlideURLs) != 1 || sub.SlideURLs[0] != "https://storage.example/slide" {
+		t.Errorf("SlideURLs = %#v", sub.SlideURLs)
+	}
+}

@@ -3,6 +3,9 @@ package reader
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 // Load проверяет доступ и собирает модель читального зала.
@@ -115,12 +118,74 @@ func (s *Service) buildSubtopic(ctx context.Context, sectionNumber, subtopicNumb
 			URL:   url,
 		}
 	}
-	for _, key := range subtopic.SlideKeys {
+	// Подписанные URL кадров по глобальному номеру N (из slide_nums);
+	// кадры без номера (старый structure.json) — сразу в галерею.
+	urlByNum := make(map[int]string, len(subtopic.SlideKeys))
+	for i, key := range subtopic.SlideKeys {
 		url, err := s.presign.PresignGet(ctx, key, s.ttl)
 		if err != nil {
 			return ViewSubtopic{}, fmt.Errorf("подписать слайд: %w", err)
 		}
-		view.SlideURLs = append(view.SlideURLs, url)
+		if i < len(subtopic.SlideNums) {
+			urlByNum[subtopic.SlideNums[i]] = url
+		} else {
+			view.SlideURLs = append(view.SlideURLs, url)
+		}
+	}
+
+	blocks, placed, err := s.splitByMarkers(subtopic.ContentMD, urlByNum)
+	if err != nil {
+		return ViewSubtopic{}, err
+	}
+	view.Blocks = blocks
+	// Кадры, не нашедшие маркер в тексте, — в галерею (в порядке slide_keys).
+	for i, num := range subtopic.SlideNums {
+		if i < len(subtopic.SlideKeys) && !placed[num] {
+			view.SlideURLs = append(view.SlideURLs, urlByNum[num])
+		}
 	}
 	return view, nil
+}
+
+// slideMarker — маркер позиции кадра из ядра: строка вида <!-- slide:N -->.
+var slideMarker = regexp.MustCompile(`(?m)^[ \t]*<!-- slide:(\d+) -->[ \t]*$`)
+
+// splitByMarkers режет markdown по маркерам <!-- slide:N --> и рендерит куски
+// в HTML; между кусками — кадры по номеру N. Маркер без известного URL
+// выбрасывается. Возвращает блоки и множество вставленных номеров.
+func (s *Service) splitByMarkers(md string, urlByNum map[int]string) ([]ViewBlock, map[int]bool, error) {
+	placed := make(map[int]bool)
+	var blocks []ViewBlock
+	appendHTML := func(chunk string) error {
+		if strings.TrimSpace(chunk) == "" {
+			return nil
+		}
+		html, err := s.md.ToHTML(strings.TrimSpace(chunk))
+		if err != nil {
+			return fmt.Errorf("отрендерить Markdown: %w", err)
+		}
+		blocks = append(blocks, ViewBlock{HTML: html})
+		return nil
+	}
+	rest := md
+	for {
+		loc := slideMarker.FindStringSubmatchIndex(rest)
+		if loc == nil {
+			break
+		}
+		if err := appendHTML(rest[:loc[0]]); err != nil {
+			return nil, nil, err
+		}
+		if num, err := strconv.Atoi(rest[loc[2]:loc[3]]); err == nil {
+			if url, ok := urlByNum[num]; ok {
+				blocks = append(blocks, ViewBlock{Slide: &ViewSlide{URL: url, Num: num}})
+				placed[num] = true
+			}
+		}
+		rest = rest[loc[1]:]
+	}
+	if err := appendHTML(rest); err != nil {
+		return nil, nil, err
+	}
+	return blocks, placed, nil
 }
