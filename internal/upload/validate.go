@@ -69,6 +69,10 @@ func ValidateYouTubeURL(raw string) error {
 	switch strings.ToLower(parsed.Hostname()) {
 	case "youtube.com", "www.youtube.com", "youtu.be", "m.youtube.com":
 		return nil
+	case "x.com", "www.x.com", "mobile.x.com", "m.x.com":
+		return nil
+	case "twitter.com", "www.twitter.com", "mobile.twitter.com", "m.twitter.com":
+		return nil
 	default:
 		return ErrInvalidURL
 	}

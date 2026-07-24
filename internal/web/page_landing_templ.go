@@ -212,7 +212,7 @@ func landingFormats() templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> <strong>Ссылки на YouTube</strong><p>Или прямой URL на файл записи — скачаем сами.</p><span class=\"ll-land-format-meta\">youtube.com · прямые ссылки</span></div></div><div class=\"ll-land-options\"><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>PDF с презентацией</strong><p>Приложите слайды отдельным файлом — вставим их в нужные темы конспекта.</p></div></div><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>Слайды из видео</strong><p>Если отдельной презентации нет — найдём кадры со слайдами прямо в записи.</p></div></div></div></section>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "</span> <strong>Ссылки на YouTube и X</strong><p>Вставьте ссылку на видео — запись скачаем сами.</p><span class=\"ll-land-format-meta\">youtube.com · x.com</span></div></div><div class=\"ll-land-options\"><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>PDF с презентацией</strong><p>Приложите слайды отдельным файлом — вставим их в нужные темы конспекта.</p></div></div><div class=\"ll-land-option\"><span class=\"ll-badge\">опционально</span><div><strong>Слайды из видео</strong><p>Если отдельной презентации нет — найдём кадры со слайдами прямо в записи.</p></div></div></div></section>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
