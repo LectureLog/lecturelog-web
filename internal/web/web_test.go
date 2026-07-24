@@ -256,6 +256,12 @@ func TestRouter_Landing(t *testing.T) {
 	if !strings.Contains(body, "ll-land-formats") {
 		t.Error("лендинг должен содержать блок форматов")
 	}
+	if !strings.Contains(body, "Ссылки на YouTube и X") {
+		t.Error("лендинг должен сообщать о поддержке ссылок YouTube и X")
+	}
+	if !strings.Contains(body, "youtube.com · x.com") {
+		t.Error("лендинг должен перечислять поддерживаемые платформы")
+	}
 }
 
 // TestRouter_NotFound проверяет стилизованную 404 вместо голого текста chi.
@@ -424,6 +430,12 @@ func TestUploadPage_YouTubeForm(t *testing.T) {
 	}
 	if !strings.Contains(html, `name="url"`) {
 		t.Error("ожидается поле url")
+	}
+	if !strings.Contains(html, "Вставьте ссылку на YouTube или X") {
+		t.Error("ожидается подсказка о ссылках YouTube и X")
+	}
+	if !strings.Contains(html, "из публичных постов X") {
+		t.Error("ожидается пояснение об ограничении X публичными постами")
 	}
 }
 

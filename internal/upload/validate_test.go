@@ -67,10 +67,16 @@ func TestValidateYouTubeURL(t *testing.T) {
 		{name: "valid youtube watch", raw: "https://youtube.com/watch?v=X", wantErr: nil},
 		{name: "valid www", raw: "https://www.youtube.com/watch?v=X", wantErr: nil},
 		{name: "valid mobile", raw: "https://m.youtube.com/watch?v=X", wantErr: nil},
+		{name: "valid x post", raw: "https://x.com/user/status/123", wantErr: nil},
+		{name: "valid x video selector", raw: "https://www.x.com/user/status/123/video/2", wantErr: nil},
+		{name: "valid mobile x", raw: "https://mobile.x.com/user/status/123", wantErr: nil},
+		{name: "valid twitter post", raw: "https://twitter.com/user/status/123", wantErr: nil},
+		{name: "valid mobile twitter", raw: "https://m.twitter.com/user/status/123", wantErr: nil},
 		{name: "empty", raw: "", wantErr: ErrInvalidURL},
 		{name: "not url", raw: "not-url", wantErr: ErrInvalidURL},
 		{name: "foreign host", raw: "https://example.com/watch?v=X", wantErr: ErrInvalidURL},
 		{name: "host confusion", raw: "https://youtu.be.evil.com/x", wantErr: ErrInvalidURL},
+		{name: "x host confusion", raw: "https://x.com.evil.com/user/status/123", wantErr: ErrInvalidURL},
 		{name: "ftp scheme", raw: "ftp://youtube.com/watch?v=X", wantErr: ErrInvalidURL},
 	}
 

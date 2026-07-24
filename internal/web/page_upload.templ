@@ -78,9 +78,9 @@ templ UploadPage(data LayoutData) {
 			<form id="ll-upload-url-panel" class="ll-upload-panel ll-upload-hidden" data-panel="url" hx-post="/upload/youtube" hx-swap="none" hx-headers={ `{"X-CSRF-Token":"` + data.CSRFToken + `"}` } method="post">
 				<label class="ll-upload-url-field">
 					@iconUploadLink()
-					<input type="url" name="url" placeholder="Вставьте ссылку на YouTube или прямой URL записи" autocomplete="off" required data-url-input/>
+					<input type="url" name="url" placeholder="Вставьте ссылку на YouTube или X" autocomplete="off" required data-url-input/>
 				</label>
-				<p class="ll-upload-url-hint">Поддерживаются YouTube и прямые ссылки на аудио/видео.</p>
+				<p class="ll-upload-url-hint">Поддерживаются видео с YouTube и из публичных постов X.</p>
 				<div class="ll-upload-options">
 					<label class="ll-upload-check">
 						<input type="checkbox" name="has_pdf" data-has-pdf/>
