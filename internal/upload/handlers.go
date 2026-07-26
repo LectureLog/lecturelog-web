@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"strings"
 
 	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/go-chi/chi/v5"
@@ -79,16 +81,25 @@ func (s *Service) handleConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "неверный запрос", http.StatusBadRequest)
+	if !parseTaskForm(w, r) {
 		return
 	}
+	defer cleanupMultipartForm(r)
 
-	_, err := s.ConfirmFileUpload(r.Context(), user.ID, ConfirmInput{
+	slides, slidesFile, err := slidesFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if slidesFile != nil {
+		defer slidesFile.Close()
+	}
+
+	_, err = s.ConfirmFileUpload(r.Context(), user.ID, ConfirmInput{
 		Token:         r.FormValue("token"),
 		S3Key:         r.FormValue("s3_key"),
 		Title:         r.FormValue("title"),
-		HasPDF:        parseUploadCheckbox(r.FormValue("has_pdf")),
+		Slides:        slides,
 		ExtractSlides: parseUploadCheckbox(r.FormValue("extract_slides")),
 	})
 	if err != nil {
@@ -117,15 +128,24 @@ func (s *Service) handleYouTube(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := r.ParseForm(); err != nil {
-		http.Error(w, "неверный запрос", http.StatusBadRequest)
+	if !parseTaskForm(w, r) {
 		return
 	}
+	defer cleanupMultipartForm(r)
 
-	_, err := s.CreateYouTube(r.Context(), user.ID, YouTubeInput{
+	slides, slidesFile, err := slidesFromRequest(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusUnprocessableEntity)
+		return
+	}
+	if slidesFile != nil {
+		defer slidesFile.Close()
+	}
+
+	_, err = s.CreateYouTube(r.Context(), user.ID, YouTubeInput{
 		URL:           r.FormValue("url"),
 		Title:         r.FormValue("title"),
-		HasPDF:        parseUploadCheckbox(r.FormValue("has_pdf")),
+		Slides:        slides,
 		ExtractSlides: parseUploadCheckbox(r.FormValue("extract_slides")),
 	})
 	if err != nil {
@@ -151,8 +171,61 @@ func uploadErrStatus(err error) int {
 		errors.Is(err, ErrTooLarge) ||
 		errors.Is(err, ErrEmptyFilename) ||
 		errors.Is(err, ErrMediaMismatch) ||
-		errors.Is(err, ErrInvalidURL) {
+		errors.Is(err, ErrInvalidURL) ||
+		errors.Is(err, ErrSlidesRequired) ||
+		errors.Is(err, ErrUnsupportedSlides) ||
+		errors.Is(err, ErrSlidesTooLarge) {
 		return http.StatusUnprocessableEntity
 	}
 	return http.StatusInternalServerError
+}
+
+func parseTaskForm(w http.ResponseWriter, r *http.Request) bool {
+	if !strings.HasPrefix(r.Header.Get("Content-Type"), "multipart/form-data") {
+		if err := r.ParseForm(); err != nil {
+			http.Error(w, "неверный запрос", http.StatusBadRequest)
+			return false
+		}
+		return true
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxSlidesBytes+(1<<20))
+	if err := r.ParseMultipartForm(1 << 20); err != nil {
+		if errors.As(err, new(*http.MaxBytesError)) {
+			http.Error(w, ErrSlidesTooLarge.Error(), http.StatusUnprocessableEntity)
+		} else {
+			http.Error(w, "неверный запрос", http.StatusBadRequest)
+		}
+		return false
+	}
+	return true
+}
+
+func slidesFromRequest(r *http.Request) (*SlidesUpload, multipart.File, error) {
+	if r.MultipartForm == nil {
+		if parseUploadCheckbox(r.FormValue("has_pdf")) {
+			return nil, nil, ErrSlidesRequired
+		}
+		return nil, nil, nil
+	}
+	file, header, err := r.FormFile("slides")
+	if errors.Is(err, http.ErrMissingFile) {
+		if parseUploadCheckbox(r.FormValue("has_pdf")) {
+			return nil, nil, ErrSlidesRequired
+		}
+		return nil, nil, nil
+	}
+	if err != nil {
+		return nil, nil, ErrSlidesRequired
+	}
+	if err := ValidateSlidesMeta(header.Filename, header.Size); err != nil {
+		_ = file.Close()
+		return nil, nil, err
+	}
+	return &SlidesUpload{Filename: header.Filename, Content: file}, file, nil
+}
+
+func cleanupMultipartForm(r *http.Request) {
+	if r.MultipartForm != nil {
+		_ = r.MultipartForm.RemoveAll()
+	}
 }

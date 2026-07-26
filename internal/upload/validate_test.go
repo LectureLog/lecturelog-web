@@ -89,3 +89,26 @@ func TestValidateYouTubeURL(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateSlidesMeta(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		size     int64
+		wantErr  error
+	}{
+		{name: "pdf", filename: "deck.pdf", size: 10, wantErr: nil},
+		{name: "pptx uppercase", filename: "DECK.PPTX", size: 10, wantErr: nil},
+		{name: "unsupported", filename: "deck.key", size: 10, wantErr: ErrUnsupportedSlides},
+		{name: "empty", filename: "deck.pdf", size: 0, wantErr: ErrEmptyFile},
+		{name: "too large", filename: "deck.pdf", size: maxSlidesBytes + 1, wantErr: ErrSlidesTooLarge},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateSlidesMeta(tt.filename, tt.size)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("ValidateSlidesMeta() error = %v, want %v", err, tt.wantErr)
+			}
+		})
+	}
+}

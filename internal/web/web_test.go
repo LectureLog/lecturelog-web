@@ -425,8 +425,8 @@ func TestUploadPage_DropZone(t *testing.T) {
 func TestUploadPage_YouTubeForm(t *testing.T) {
 	html := renderUploadPage(t)
 
-	if !strings.Contains(html, `hx-post="/upload/youtube"`) {
-		t.Error("ожидается htmx-форма POST /upload/youtube")
+	if !strings.Contains(html, `data-url-form`) || !strings.Contains(html, `enctype="multipart/form-data"`) {
+		t.Error("ожидается JS-форма URL с multipart/form-data")
 	}
 	if !strings.Contains(html, `name="url"`) {
 		t.Error("ожидается поле url")
@@ -436,6 +436,19 @@ func TestUploadPage_YouTubeForm(t *testing.T) {
 	}
 	if !strings.Contains(html, "из публичных постов X") {
 		t.Error("ожидается пояснение об ограничении X публичными постами")
+	}
+}
+
+func TestUploadPage_DocumentSlidesInputs(t *testing.T) {
+	html := renderUploadPage(t)
+	if strings.Count(html, `name="slides"`) != 2 {
+		t.Error("ожидается по одному input slides в file и URL режимах")
+	}
+	if !strings.Contains(html, `accept=".pdf,.pptx`) {
+		t.Error("slides input должен принимать PDF и PPTX")
+	}
+	if !strings.Contains(html, `data-slides-area`) || !strings.Contains(html, "До 100 МБ") {
+		t.Error("ожидается скрываемая область выбора презентации с лимитом")
 	}
 }
 

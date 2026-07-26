@@ -20,6 +20,8 @@ type mockCore struct {
 	// Захваченные данные последнего запроса для ассертов в тестах.
 	lastUploadFilename string
 	lastTaskForm       map[string]string
+	lastSlidesFilename string
+	lastSlidesBody     []byte
 	lastTaskCT         string
 	lastCookieCT       string
 	lastCookieBody     []byte
@@ -79,6 +81,16 @@ func newMockCore(t *testing.T) *mockCore {
 			if len(v) > 0 {
 				m.lastTaskForm[k] = v[0]
 			}
+		}
+		if files := r.MultipartForm.File["slides"]; len(files) > 0 {
+			m.lastSlidesFilename = files[0].Filename
+			file, err := files[0].Open()
+			if err != nil {
+				http.Error(w, "bad slides", http.StatusBadRequest)
+				return
+			}
+			m.lastSlidesBody, _ = io.ReadAll(file)
+			_ = file.Close()
 		}
 
 		// Ветка 400: нет ни одного источника.
@@ -239,6 +251,30 @@ func TestCreateTask_VideoURL(t *testing.T) {
 	}
 }
 
+func TestCreateTask_WithDocumentSlides(t *testing.T) {
+	m := newMockCore(t)
+	c := newTestClient(t, m.srv.URL)
+
+	id, err := c.CreateTask(context.Background(), CreateTaskParams{
+		VideoURL:      "https://youtu.be/x",
+		NoSlides:      true,
+		SlidesName:    "deck.pptx",
+		SlidesContent: strings.NewReader("pptx-content"),
+	})
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if id != "task-123" {
+		t.Errorf("task id = %q, want task-123", id)
+	}
+	if m.lastSlidesFilename != "deck.pptx" {
+		t.Errorf("slides filename = %q, want deck.pptx", m.lastSlidesFilename)
+	}
+	if string(m.lastSlidesBody) != "pptx-content" {
+		t.Errorf("slides body = %q, want pptx-content", m.lastSlidesBody)
+	}
+}
+
 func TestCreateTask_NoSource(t *testing.T) {
 	m := newMockCore(t)
 	c := newTestClient(t, m.srv.URL)
@@ -246,6 +282,19 @@ func TestCreateTask_NoSource(t *testing.T) {
 	_, err := c.CreateTask(context.Background(), CreateTaskParams{})
 	if err == nil {
 		t.Fatal("ожидалась ошибка: не задан источник")
+	}
+}
+
+func TestCreateTask_SlidesRequireNameAndContent(t *testing.T) {
+	m := newMockCore(t)
+	c := newTestClient(t, m.srv.URL)
+
+	_, err := c.CreateTask(context.Background(), CreateTaskParams{
+		VideoURL:      "https://youtu.be/x",
+		SlidesContent: strings.NewReader("pdf"),
+	})
+	if err == nil {
+		t.Fatal("expected error for slides without filename")
 	}
 }
 

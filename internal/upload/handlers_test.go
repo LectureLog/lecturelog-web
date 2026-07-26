@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -239,11 +241,56 @@ func TestConfirm_ExtractSlidesUnchecked(t *testing.T) {
 	assertConfirmNoSlidesFromForm(t, url.Values{}, true)
 }
 
-func TestConfirm_HasPDFForcesNoSlides(t *testing.T) {
-	assertConfirmNoSlidesFromForm(t, url.Values{
-		"has_pdf":        {"on"},
-		"extract_slides": {"on"},
-	}, true)
+func TestConfirm_HasPDFWithoutFileRejected(t *testing.T) {
+	s3Key := "uploads/user-test-uuid/lecture.mp4"
+	signer := newTestServiceSigner()
+	handler := mountTestRouter(NewService(&mockCore{}, &mockRepo{}, signer, time.Hour))
+	form := url.Values{
+		"token":   {signer.Sign(testUser.ID, s3Key, "video", time.Hour)},
+		"s3_key":  {s3Key},
+		"title":   {"Lecture"},
+		"has_pdf": {"on"},
+	}
+	req := addSessionCookie(newFormRequest(http.MethodPost, "/upload/confirm", form))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /upload/confirm without slides = %d, want 422", rec.Code)
+	}
+}
+
+func TestConfirm_WithSlidesPassesDocumentToCore(t *testing.T) {
+	s3Key := "uploads/user-test-uuid/lecture.mp4"
+	signer := newTestServiceSigner()
+	core := &mockCore{
+		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.SlidesName != "deck.pdf" {
+				t.Fatalf("SlidesName = %q, want deck.pdf", p.SlidesName)
+			}
+			got, err := io.ReadAll(p.SlidesContent)
+			if err != nil || string(got) != "%PDF-test" {
+				t.Fatalf("SlidesContent = %q, err=%v", got, err)
+			}
+			if p.NoSlides {
+				t.Fatal("NoSlides = true would disable the attached document in core")
+			}
+			return "task-confirm", nil
+		},
+	}
+	handler := mountTestRouter(NewService(core, &mockRepo{}, signer, time.Hour))
+	fields := url.Values{
+		"token":          {signer.Sign(testUser.ID, s3Key, "video", time.Hour)},
+		"s3_key":         {s3Key},
+		"title":          {"Lecture"},
+		"has_pdf":        {"true"},
+		"extract_slides": {"true"},
+	}
+	req := addSessionCookie(newMultipartRequest(t, http.MethodPost, "/upload/confirm", fields, "deck.pdf", "%PDF-test"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /upload/confirm with slides = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
 }
 
 func TestConfirm_ExtractSlidesCheckedEnablesSlides(t *testing.T) {
@@ -337,9 +384,88 @@ func TestYouTube_BadURL(t *testing.T) {
 	}
 }
 
+func TestYouTube_WithSlidesPassesDocumentToCore(t *testing.T) {
+	core := &mockCore{
+		createTaskFunc: func(_ context.Context, p coreclient.CreateTaskParams) (string, error) {
+			if p.VideoURL != "https://youtu.be/video" || p.SlidesName != "deck.pptx" {
+				t.Fatalf("params = %+v", p)
+			}
+			got, err := io.ReadAll(p.SlidesContent)
+			if err != nil || string(got) != "pptx-test" {
+				t.Fatalf("SlidesContent = %q, err=%v", got, err)
+			}
+			if p.NoSlides {
+				t.Fatal("NoSlides = true would disable the attached document")
+			}
+			return "task-youtube", nil
+		},
+	}
+	handler := mountTestRouter(newTestHTTPService(core, &mockRepo{}))
+	fields := url.Values{
+		"url":     {"https://youtu.be/video"},
+		"title":   {"Lecture"},
+		"has_pdf": {"true"},
+	}
+	req := addSessionCookie(newMultipartRequest(t, http.MethodPost, "/upload/youtube", fields, "deck.pptx", "pptx-test"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST /upload/youtube with slides = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestYouTube_RejectsUnsupportedSlides(t *testing.T) {
+	handler := mountTestRouter(newTestHTTPService(&mockCore{}, &mockRepo{}))
+	fields := url.Values{
+		"url":     {"https://youtu.be/video"},
+		"has_pdf": {"true"},
+	}
+	req := addSessionCookie(newMultipartRequest(t, http.MethodPost, "/upload/youtube", fields, "deck.key", "key-test"))
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("POST /upload/youtube unsupported slides = %d, want 422", rec.Code)
+	}
+}
+
 func newFormRequest(method, target string, form url.Values) *http.Request {
 	req := httptest.NewRequest(method, target, strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return req
+}
+
+func newMultipartRequest(
+	t *testing.T,
+	method string,
+	target string,
+	fields url.Values,
+	filename string,
+	content string,
+) *http.Request {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, values := range fields {
+		for _, value := range values {
+			if err := writer.WriteField(key, value); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if filename != "" {
+		part, err := writer.CreateFormFile("slides", filename)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write([]byte(content)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(method, target, &body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	return req
 }
 

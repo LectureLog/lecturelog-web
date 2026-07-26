@@ -3,6 +3,7 @@ package upload
 import (
 	"context"
 	"errors"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -43,14 +44,14 @@ type ConfirmInput struct {
 	Token         string
 	S3Key         string
 	Title         string
-	HasPDF        bool
+	Slides        *SlidesUpload
 	ExtractSlides bool
 }
 
 type YouTubeInput struct {
 	URL           string
 	Title         string
-	HasPDF        bool
+	Slides        *SlidesUpload
 	ExtractSlides bool
 }
 
@@ -98,9 +99,11 @@ func (s *Service) ConfirmFileUpload(ctx context.Context, userID string, in Confi
 	}
 
 	taskID, err := s.core.CreateTask(ctx, coreclient.CreateTaskParams{
-		S3Key:    in.S3Key,
-		Media:    media,
-		NoSlides: noSlides(in.HasPDF, in.ExtractSlides),
+		S3Key:         in.S3Key,
+		Media:         media,
+		NoSlides:      noSlides(in.Slides != nil, in.ExtractSlides),
+		SlidesName:    slidesName(in.Slides),
+		SlidesContent: slidesContent(in.Slides),
 	})
 	if err != nil {
 		return "", err
@@ -120,11 +123,11 @@ func (s *Service) CreateYouTube(ctx context.Context, userID string, in YouTubeIn
 		return "", err
 	}
 
-	// Долг: PDF-слайды пока не передаются в ядро, потому что CreateTaskParams
-	// не принимает файл слайдов; HasPDF только отключает извлечение слайдов.
 	taskID, err := s.core.CreateTask(ctx, coreclient.CreateTaskParams{
-		VideoURL: in.URL,
-		NoSlides: noSlides(in.HasPDF, in.ExtractSlides),
+		VideoURL:      in.URL,
+		NoSlides:      noSlides(in.Slides != nil, in.ExtractSlides),
+		SlidesName:    slidesName(in.Slides),
+		SlidesContent: slidesContent(in.Slides),
 	})
 	if err != nil {
 		return "", err
@@ -139,11 +142,22 @@ func (s *Service) CreateYouTube(ctx context.Context, userID string, in YouTubeIn
 	})
 }
 
-func noSlides(hasPDF, extractSlides bool) bool {
-	if hasPDF {
-		return true
+func noSlides(hasDocument, extractSlides bool) bool {
+	return !hasDocument && !extractSlides
+}
+
+func slidesName(slides *SlidesUpload) string {
+	if slides == nil {
+		return ""
 	}
-	return !extractSlides
+	return filepath.Base(slides.Filename)
+}
+
+func slidesContent(slides *SlidesUpload) io.Reader {
+	if slides == nil {
+		return nil
+	}
+	return slides.Content
 }
 
 func titleFromFilename(filename string) string {
