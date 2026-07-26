@@ -10,6 +10,7 @@
     var csrf = root.getAttribute('data-csrf') || '';
     var filePanel = root.querySelector('[data-panel="file"]');
     var urlPanel = root.querySelector('[data-panel="url"]');
+    var urlForm = root.querySelector('[data-url-form]');
     var modeButtons = Array.prototype.slice.call(root.querySelectorAll('[data-mode]'));
     var drop = root.querySelector('[data-drop]');
     var dropEmpty = root.querySelector('[data-drop-empty]');
@@ -22,10 +23,17 @@
     var fileSubmit = root.querySelector('[data-file-submit]');
     var submitLabel = root.querySelector('[data-submit-label]');
     var status = root.querySelector('[data-status]');
-    var error = root.querySelector('[data-error]');
+    var errors = Array.prototype.slice.call(root.querySelectorAll('[data-error]'));
     var hasPDFInputs = Array.prototype.slice.call(root.querySelectorAll('[data-has-pdf]'));
     var extractInputs = Array.prototype.slice.call(root.querySelectorAll('[data-extract-slides]'));
+    var slidesAreas = Array.prototype.slice.call(root.querySelectorAll('[data-slides-area]'));
+    var slidesInputs = Array.prototype.slice.call(root.querySelectorAll('[data-slides-input]'));
+    var slidesPickers = Array.prototype.slice.call(root.querySelectorAll('[data-slides-pick]'));
+    var slidesFiles = Array.prototype.slice.call(root.querySelectorAll('[data-slides-file]'));
+    var slidesNames = Array.prototype.slice.call(root.querySelectorAll('[data-slides-name]'));
+    var slidesClearers = Array.prototype.slice.call(root.querySelectorAll('[data-slides-clear]'));
     var selectedFile = null;
+    var selectedSlides = null;
     var isSubmitting = false;
     var dragDepth = 0;
     var defaultSubmitText = submitLabel ? submitLabel.textContent : '';
@@ -69,16 +77,17 @@
     }
 
     function clearError() {
-      if (error) {
+      errors.forEach(function (error) {
         error.textContent = '';
         error.classList.remove('ll-upload-errnote--show');
-      }
+      });
       if (drop) {
         drop.classList.remove('ll-upload-drop--error');
       }
     }
 
     function showError(message) {
+      var error = root.querySelector('[data-panel]:not(.ll-upload-hidden) [data-error]') || errors[0];
       if (error) {
         error.textContent = message;
         error.classList.add('ll-upload-errnote--show');
@@ -191,13 +200,22 @@
     }
 
     function postForm(url, fields) {
+      var body = new FormData();
+      Object.keys(fields).forEach(function (key) {
+        if (fields[key] !== '') {
+          body.append(key, fields[key]);
+        }
+      });
+      if (selectedSlides) {
+        body.append('slides', selectedSlides, selectedSlides.name);
+      }
       return fetch(url, {
         method: 'POST',
         credentials: 'same-origin',
         headers: {
           'X-CSRF-Token': csrf
         },
-        body: new URLSearchParams(fields)
+        body: body
       });
     }
 
@@ -218,6 +236,10 @@
       var file = selectedFile;
       if (!file) {
         showError('Выберите аудио- или видеофайл.');
+        return;
+      }
+      if (hasSlidesChecked() && !selectedSlides) {
+        showError('Выберите PDF или PPTX с презентацией.');
         return;
       }
 
@@ -292,6 +314,89 @@
           input.checked = false;
         }
       });
+      slidesAreas.forEach(function (area) {
+        area.classList.toggle('ll-upload-hidden', !checked);
+      });
+      if (!checked) {
+        clearSlides();
+      }
+    }
+
+    function hasSlidesChecked() {
+      return hasPDFInputs.some(function (input) { return input.checked; });
+    }
+
+    function isSlidesFile(file) {
+      return file && /\.(pdf|pptx)$/i.test(file.name || '') && file.size > 0 && file.size <= 100 * 1024 * 1024;
+    }
+
+    function renderSlides() {
+      slidesNames.forEach(function (name) {
+        name.textContent = selectedSlides ? selectedSlides.name + ' · ' + formatSize(selectedSlides.size) : '';
+      });
+      slidesFiles.forEach(function (file) {
+        file.classList.toggle('ll-upload-hidden', !selectedSlides);
+      });
+      slidesPickers.forEach(function (picker) {
+        picker.classList.toggle('ll-upload-hidden', !!selectedSlides);
+      });
+    }
+
+    function takeSlides(file) {
+      if (!isSlidesFile(file)) {
+        showError('Нужен непустой PDF или PPTX размером до 100 МБ.');
+        return;
+      }
+      selectedSlides = file;
+      hasPDFInputs.forEach(function (input) { input.checked = true; });
+      syncSlidesOptions(hasPDFInputs[0]);
+      renderSlides();
+      clearError();
+    }
+
+    function clearSlides() {
+      selectedSlides = null;
+      slidesInputs.forEach(function (input) { input.value = ''; });
+      renderSlides();
+    }
+
+    function submitURL(event) {
+      event.preventDefault();
+      if (isSubmitting) {
+        return;
+      }
+      if (hasSlidesChecked() && !selectedSlides) {
+        showError('Выберите PDF или PPTX с презентацией.');
+        return;
+      }
+      var urlInput = urlForm.querySelector('[data-url-input]');
+      if (!urlInput || !urlInput.checkValidity()) {
+        if (urlInput) {
+          urlInput.reportValidity();
+        }
+        return;
+      }
+
+      var extract = urlForm.querySelector('[data-extract-slides]');
+      isSubmitting = true;
+      clearError();
+      postForm('/upload/youtube', {
+        url: urlInput.value,
+        title: '',
+        has_pdf: hasSlidesChecked() ? 'true' : '',
+        extract_slides: extract && extract.checked && !hasSlidesChecked() ? 'true' : ''
+      }).then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (text) {
+            throw new Error(errorMessage(res, text, 'Не удалось создать задачу обработки.'));
+          });
+        }
+        window.location.assign(res.headers.get('HX-Redirect') || '/lectures');
+      }).catch(function (err) {
+        showError(err.message || 'Не удалось создать задачу обработки.');
+      }).finally(function () {
+        isSubmitting = false;
+      });
     }
 
     modeButtons.forEach(function (button) {
@@ -303,6 +408,23 @@
     hasPDFInputs.forEach(function (input) {
       input.addEventListener('change', function () {
         syncSlidesOptions(input);
+      });
+    });
+
+    slidesPickers.forEach(function (picker, index) {
+      picker.addEventListener('click', function () {
+        slidesInputs[index].click();
+      });
+    });
+    slidesInputs.forEach(function (input) {
+      input.addEventListener('change', function () {
+        takeSlides(input.files && input.files[0]);
+      });
+    });
+    slidesClearers.forEach(function (clearer) {
+      clearer.addEventListener('click', function () {
+        hasPDFInputs.forEach(function (input) { input.checked = false; });
+        syncSlidesOptions(hasPDFInputs[0]);
       });
     });
 
@@ -358,6 +480,9 @@
 
     if (fileSubmit) {
       fileSubmit.addEventListener('click', submitFile);
+    }
+    if (urlForm) {
+      urlForm.addEventListener('submit', submitURL);
     }
 
     syncSlidesOptions(hasPDFInputs[0] || { checked: false });

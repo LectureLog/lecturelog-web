@@ -178,7 +178,8 @@ YouTube-лекции, карточка лекции покажет ошибку 
   тело `application/json` `{filename}`); возвращает `{Key, URL, ExpiresIn}`.
 - `CreateTask(ctx, params)` — создание задачи (`POST /tasks`,
   **multipart/form-data**); ровно один источник — `S3Key` или `VideoURL`, плюс
-  опциональные `Media` и `NoSlides`. multipart-тело собирается вручную, т.к.
+  опциональные `Media`, `NoSlides` и презентация `SlidesName`/`SlidesContent`
+  (поле API `slides`, PDF/PPTX). multipart-тело собирается вручную, т.к.
   oapi-codegen для multipart даёт только сырой `…WithBodyWithResponse`.
 - `GetTaskStatus(ctx, taskID)` — статус задачи (`GET /tasks/{id}`); на 404
   возвращает `ErrTaskNotFound`. Nullable-поля (`Stage`, `Error`, `ErrorCode`,

@@ -999,6 +999,63 @@
     outline-offset: 2px;
   }
 
+  .ll-upload-slides-option {
+    display: grid;
+    gap: 12px;
+  }
+
+  .ll-upload-slides {
+    margin-left: 37px;
+    padding: 14px 16px;
+    border: 1px dashed var(--border-2);
+    border-radius: var(--r-card);
+    background: var(--surface-2);
+  }
+
+  .ll-upload-slides-pick,
+  .ll-upload-slides-file button {
+    border: 1px solid var(--border-2);
+    border-radius: var(--r-btn);
+    background: var(--surface);
+    color: var(--ink);
+    font: 600 13px var(--font-sans);
+    cursor: pointer;
+  }
+
+  .ll-upload-slides-pick {
+    min-height: 38px;
+    padding: 0 16px;
+  }
+
+  .ll-upload-slides-file {
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 13px;
+    color: var(--ink);
+  }
+
+  .ll-upload-slides-file:not(.ll-upload-hidden) {
+    display: flex;
+  }
+
+  .ll-upload-slides-file span {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .ll-upload-slides-file button {
+    flex: none;
+    padding: 7px 11px;
+    color: var(--text-2);
+  }
+
+  .ll-upload-slides > p {
+    margin: 8px 0 0;
+    font-size: 12px;
+    color: var(--text-3);
+  }
+
   .ll-upload-opt-title,
   .ll-upload-opt-text {
     display: block;

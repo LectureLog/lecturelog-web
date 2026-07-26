@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"strconv"
@@ -34,10 +35,12 @@ type UploadResult struct {
 // Должен быть задан РОВНО ОДИН источник: S3Key ИЛИ VideoURL. Сценарии B1
 // покрывают именно эти два источника (audio/video-файлы напрямую — вне scope).
 type CreateTaskParams struct {
-	S3Key    string // источник: ключ уже загруженного объекта (uploads/...)
-	VideoURL string // источник: URL видео (напр. ссылка YouTube)
-	Media    string // опционально: "audio" | "video" (по умолчанию на стороне ядра — audio)
-	NoSlides bool   // опционально: отключить извлечение слайдов
+	S3Key         string    // источник: ключ уже загруженного объекта (uploads/...)
+	VideoURL      string    // источник: URL видео (напр. ссылка YouTube)
+	Media         string    // опционально: "audio" | "video" (по умолчанию на стороне ядра — audio)
+	NoSlides      bool      // опционально: отключить извлечение слайдов
+	SlidesName    string    // имя приложенного PDF/PPTX
+	SlidesContent io.Reader // содержимое приложенного PDF/PPTX
 }
 
 // CreateUpload запрашивает у ядра presigned-PUT URL для загрузки контента.
@@ -77,6 +80,9 @@ func (c *CoreClient) CreateTask(ctx context.Context, params CreateTaskParams) (s
 	if hasS3 == hasURL {
 		return "", fmt.Errorf("coreclient: нужен ровно один источник (s3_key ИЛИ video_url)")
 	}
+	if (params.SlidesContent == nil) != (params.SlidesName == "") {
+		return "", fmt.Errorf("coreclient: slides требуют одновременно имя и содержимое")
+	}
 
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
@@ -98,6 +104,15 @@ func (c *CoreClient) CreateTask(ctx context.Context, params CreateTaskParams) (s
 	if params.NoSlides {
 		if err := w.WriteField("no_slides", strconv.FormatBool(params.NoSlides)); err != nil {
 			return "", fmt.Errorf("coreclient: запись no_slides: %w", err)
+		}
+	}
+	if params.SlidesContent != nil {
+		part, err := w.CreateFormFile("slides", params.SlidesName)
+		if err != nil {
+			return "", fmt.Errorf("coreclient: создание части slides: %w", err)
+		}
+		if _, err := io.Copy(part, params.SlidesContent); err != nil {
+			return "", fmt.Errorf("coreclient: запись slides: %w", err)
 		}
 	}
 	if err := w.Close(); err != nil {

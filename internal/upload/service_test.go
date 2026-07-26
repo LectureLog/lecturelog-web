@@ -3,6 +3,7 @@ package upload
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -188,16 +189,19 @@ func TestConfirmFileUpload_CoreError(t *testing.T) {
 	}
 }
 
-func TestConfirmFileUpload_PDFForcesNoSlides(t *testing.T) {
-	assertConfirmNoSlides(t, ConfirmInput{HasPDF: true, ExtractSlides: true}, true)
+func TestConfirmFileUpload_DocumentKeepsSlidesEnabled(t *testing.T) {
+	assertConfirmNoSlides(t, ConfirmInput{
+		Slides:        &SlidesUpload{Filename: "deck.pdf", Content: strings.NewReader("pdf")},
+		ExtractSlides: true,
+	}, false)
 }
 
 func TestConfirmFileUpload_ExtractToggleOff(t *testing.T) {
-	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: false}, true)
+	assertConfirmNoSlides(t, ConfirmInput{ExtractSlides: false}, true)
 }
 
 func TestConfirmFileUpload_ExtractOn(t *testing.T) {
-	assertConfirmNoSlides(t, ConfirmInput{HasPDF: false, ExtractSlides: true}, false)
+	assertConfirmNoSlides(t, ConfirmInput{ExtractSlides: true}, false)
 }
 
 func TestCreateYouTube_Success(t *testing.T) {
@@ -258,15 +262,18 @@ func TestCreateYouTube_Success(t *testing.T) {
 }
 
 func TestCreateYouTube_ExtractSlidesOn(t *testing.T) {
-	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: true}, false)
+	assertYouTubeNoSlides(t, YouTubeInput{ExtractSlides: true}, false)
 }
 
-func TestCreateYouTube_PDFForcesNoSlides(t *testing.T) {
-	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: true, ExtractSlides: true}, true)
+func TestCreateYouTube_DocumentKeepsSlidesEnabled(t *testing.T) {
+	assertYouTubeNoSlides(t, YouTubeInput{
+		Slides:        &SlidesUpload{Filename: "deck.pptx", Content: strings.NewReader("pptx")},
+		ExtractSlides: true,
+	}, false)
 }
 
 func TestCreateYouTube_NoSlidesAtAll(t *testing.T) {
-	assertYouTubeNoSlides(t, YouTubeInput{HasPDF: false, ExtractSlides: false}, true)
+	assertYouTubeNoSlides(t, YouTubeInput{ExtractSlides: false}, true)
 }
 
 func TestCreateYouTube_InvalidURL(t *testing.T) {

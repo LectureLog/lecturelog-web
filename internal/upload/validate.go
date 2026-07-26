@@ -2,6 +2,7 @@ package upload
 
 import (
 	"errors"
+	"io"
 	"net/url"
 	"path/filepath"
 	"strings"
@@ -15,16 +16,43 @@ const (
 
 	// Грубый потолок беты.
 	maxUploadBytes int64 = 5 << 30
+	maxSlidesBytes int64 = 100 << 20
 )
 
 var (
-	ErrUnsupportedMedia = errors.New("неподдерживаемый тип медиа")
-	ErrEmptyFile        = errors.New("пустой файл")
-	ErrTooLarge         = errors.New("файл слишком большой")
-	ErrEmptyFilename    = errors.New("пустое имя файла")
-	ErrInvalidURL       = errors.New("некорректная ссылка")
-	ErrMediaMismatch    = errors.New("тип медиа не соответствует расширению файла")
+	ErrUnsupportedMedia  = errors.New("неподдерживаемый тип медиа")
+	ErrEmptyFile         = errors.New("пустой файл")
+	ErrTooLarge          = errors.New("файл слишком большой")
+	ErrEmptyFilename     = errors.New("пустое имя файла")
+	ErrInvalidURL        = errors.New("некорректная ссылка")
+	ErrMediaMismatch     = errors.New("тип медиа не соответствует расширению файла")
+	ErrSlidesRequired    = errors.New("выберите файл презентации")
+	ErrUnsupportedSlides = errors.New("поддерживаются только PDF и PPTX")
+	ErrSlidesTooLarge    = errors.New("презентация слишком большая")
 )
+
+type SlidesUpload struct {
+	Filename string
+	Content  io.Reader
+}
+
+func ValidateSlidesMeta(filename string, size int64) error {
+	if filename == "" {
+		return ErrSlidesRequired
+	}
+	switch strings.ToLower(filepath.Ext(filename)) {
+	case ".pdf", ".pptx":
+	default:
+		return ErrUnsupportedSlides
+	}
+	if size <= 0 {
+		return ErrEmptyFile
+	}
+	if size > maxSlidesBytes {
+		return ErrSlidesTooLarge
+	}
+	return nil
+}
 
 func DetectMedia(filename string) (media string, ok bool) {
 	switch strings.ToLower(filepath.Ext(filename)) {

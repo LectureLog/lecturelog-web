@@ -50,14 +50,7 @@ templ UploadPage(data LayoutData) {
 				</div>
 				<div class="ll-upload-errnote" data-error role="alert" aria-live="polite"></div>
 				<div class="ll-upload-options">
-					<label class="ll-upload-check">
-						<input type="checkbox" name="has_pdf" data-has-pdf/>
-						<span class="ll-upload-check-box" aria-hidden="true"></span>
-						<span>
-							<span class="ll-upload-opt-title">Есть PDF со слайдами</span>
-							<span class="ll-upload-opt-text">Не извлекать слайды из видео, если презентация уже есть отдельно.</span>
-						</span>
-					</label>
+					@slidesUploadOption()
 					<label class="ll-upload-switch-row">
 						<span>
 							<span class="ll-upload-opt-title">Извлекать слайды из видео</span>
@@ -75,21 +68,15 @@ templ UploadPage(data LayoutData) {
 					<span class="ll-upload-cta-note" data-status>Конспект появится в «Моих лекциях» — обработка идёт на сервере, страницу можно закрыть.</span>
 				</div>
 			</div>
-			<form id="ll-upload-url-panel" class="ll-upload-panel ll-upload-hidden" data-panel="url" hx-post="/upload/youtube" hx-swap="none" hx-headers={ `{"X-CSRF-Token":"` + data.CSRFToken + `"}` } method="post">
+			<form id="ll-upload-url-panel" class="ll-upload-panel ll-upload-hidden" data-panel="url" method="post" enctype="multipart/form-data" data-url-form>
 				<label class="ll-upload-url-field">
 					@iconUploadLink()
 					<input type="url" name="url" placeholder="Вставьте ссылку на YouTube или X" autocomplete="off" required data-url-input/>
 				</label>
 				<p class="ll-upload-url-hint">Поддерживаются видео с YouTube и из публичных постов X.</p>
+				<div class="ll-upload-errnote" data-error role="alert" aria-live="polite"></div>
 				<div class="ll-upload-options">
-					<label class="ll-upload-check">
-						<input type="checkbox" name="has_pdf" data-has-pdf/>
-						<span class="ll-upload-check-box" aria-hidden="true"></span>
-						<span>
-							<span class="ll-upload-opt-title">Есть PDF со слайдами</span>
-							<span class="ll-upload-opt-text">Не извлекать слайды из видео, если презентация уже есть отдельно.</span>
-						</span>
-					</label>
+					@slidesUploadOption()
 					<label class="ll-upload-switch-row">
 						<span>
 							<span class="ll-upload-opt-title">Извлекать слайды из видео</span>
@@ -111,6 +98,28 @@ templ UploadPage(data LayoutData) {
 		</section>
 		<script src="/static/js/upload.js" defer></script>
 	}
+}
+
+templ slidesUploadOption() {
+	<div class="ll-upload-slides-option">
+		<label class="ll-upload-check">
+			<input type="checkbox" name="has_pdf" data-has-pdf/>
+			<span class="ll-upload-check-box" aria-hidden="true"></span>
+			<span>
+				<span class="ll-upload-opt-title">Есть PDF или PPTX со слайдами</span>
+				<span class="ll-upload-opt-text">Загрузим презентацию и автоматически привяжем страницы к конспекту.</span>
+			</span>
+		</label>
+		<div class="ll-upload-slides ll-upload-hidden" data-slides-area>
+			<input class="ll-upload-hidden" type="file" name="slides" accept=".pdf,.pptx,application/pdf,application/vnd.openxmlformats-officedocument.presentationml.presentation" data-slides-input/>
+			<button class="ll-upload-slides-pick" type="button" data-slides-pick>Выбрать PDF или PPTX</button>
+			<div class="ll-upload-slides-file ll-upload-hidden" data-slides-file>
+				<span data-slides-name></span>
+				<button type="button" data-slides-clear aria-label="Убрать презентацию">Убрать</button>
+			</div>
+			<p>До 100 МБ.</p>
+		</div>
+	</div>
 }
 
 templ iconUploadFile() {
