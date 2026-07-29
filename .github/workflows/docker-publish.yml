@@ -16,24 +16,10 @@ env:
   IMAGE_NAME: ghcr.io/lecturelog/lecturelog-web
 
 jobs:
+  # Тот же гейт, что и на pull request — единое определение в gate.yml,
+  # чтобы проверки PR не могли разойтись с тем, что гейтит публикацию образа.
   gate:
-    name: Gate
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Run gate
-        run: make gate
-
-      - name: Check generated artifacts
-        run: git diff --exit-code
+    uses: ./.github/workflows/gate.yml
 
   publish:
     name: Publish image
