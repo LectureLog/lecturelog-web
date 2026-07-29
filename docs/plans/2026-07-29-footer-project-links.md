@@ -14,7 +14,9 @@
 |---|---|
 | `lecturelog-core` | `https://github.com/LectureLog/lecturelog-core` |
 | `lecturelog-web` | `https://github.com/LectureLog/lecturelog-web` |
-| `@fus1ond` | `https://t.me/fus1ond` |
+| только иконка, без подписи | `https://t.me/fus1ond` |
+
+Telegram по решению владельца — **только иконка**, минималистично. Следствие, которое нельзя терять: иконка помечена `aria-hidden`, поэтому у такой ссылки не остаётся видимого текста и доступное имя обязано жить в `aria-label` (иначе скринридер прочитает URL). Плюс область нажатия у голой иконки должна дотягивать до 24×24 (WCAG 2.5.8).
 
 **Команды проекта:**
 - `make templ` — регенерация `*_templ.go` (обязательно после правки `.templ`)
@@ -101,7 +103,8 @@ templ footerExtLink(href string, label string) {
 
 Тестов футера в проекте сейчас нет вообще — добавляются с нуля, поверх существующих хелперов `renderLayout` / `renderLayoutWithData`.
 
-- `TestFooter_ProjectLinks` — все три URL присутствуют в отрендеренном HTML вместе с подписями.
+- `TestFooter_ProjectLinks` — все три URL присутствуют; у ссылок на репозитории есть видимая подпись, у Telegram видимого текста нет, а имя лежит в `aria-label`.
+- `TestFooter_LinksHaveAccessibleName` — ни одна ссылка футера не безымянна: есть либо текст, либо `aria-label`.
 - `TestFooter_ExternalLinksSecurity` — обход DOM через `golang.org/x/net/html` (уже импортирован в файле): **каждая** ссылка с `target="_blank"` обязана иметь `rel`, содержащий и `noopener`, и `noreferrer`. Тест намеренно сформулирован про все такие ссылки, а не про три конкретные, — он должен ловить регрессию у любой будущей внешней ссылки.
 - `TestFooter_ShowcaseLink` — `/hub` не потерялась и не получила `target="_blank"`.
 - Проверить футер и для анонима, и для `IsAuthed` — он не зависит от авторизации.

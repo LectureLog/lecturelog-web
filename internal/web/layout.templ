@@ -184,7 +184,7 @@ templ logoutButton(csrfToken string) {
 	</form>
 }
 
-// footer — нижний колонтитул: марка, слоган, тонкая линия сверху.
+// footer — нижний колонтитул: марка, слоган, ссылки на проект, тонкая линия сверху.
 templ footer() {
 	<footer class="ll-footer">
 		<div class="ll-footer-inner">
@@ -193,9 +193,44 @@ templ footer() {
 				<span>LectureLog</span>
 			</div>
 			<p class="ll-footer-tag">Конспекты лекций с тайм-кодами — загрузите запись, читайте конспект.</p>
-			<a class="ll-footer-link" href="/hub">Витрина публичных лекций</a>
+			<nav class="ll-footer-links" aria-label="Ссылки проекта">
+				<a class="ll-footer-link" href="/hub">Витрина</a>
+				@footerExtLink(repoCoreURL, "lecturelog-core", false) {
+					@iconGithub()
+				}
+				@footerExtLink(repoWebURL, "lecturelog-web", false) {
+					@iconGithub()
+				}
+				@footerExtLink(devTelegramURL, "Telegram разработчика — @fus1ond", true) {
+					@iconTelegram()
+				}
+			</nav>
 		</div>
 	</footer>
+}
+
+// footerExtLink — внешняя ссылка футера; иконка передаётся дочерним блоком.
+// Единственная точка задания target/rel: без noopener новая вкладка получает
+// доступ к window.opener, поэтому rel задаётся здесь, а не на местах вызова.
+// href передаётся выражением, а не литералом — так templ прогоняет его через
+// SafeURL-санитайзер и посторонние схемы становятся about:invalid.
+//
+// label — доступное имя ссылки. При iconOnly=true подпись не рисуется, и имя
+// остаётся только в aria-label: сама иконка помечена aria-hidden, поэтому без
+// aria-label скринридер прочитал бы лишь URL.
+templ footerExtLink(href string, label string, iconOnly bool) {
+	<a
+		class={ "ll-footer-link", "ll-footer-link--ext", templ.KV("ll-footer-link--icon", iconOnly) }
+		href={ href }
+		target="_blank"
+		rel="noopener noreferrer"
+		aria-label={ label }
+	>
+		{ children... }
+		if !iconOnly {
+			<span>{ label }</span>
+		}
+	</a>
 }
 
 // brandMark — логотип-квадрат 24px цвета --accent с иконкой книги.
