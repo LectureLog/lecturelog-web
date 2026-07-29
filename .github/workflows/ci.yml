@@ -1,0 +1,20 @@
+name: CI
+
+# До появления этого workflow тесты гонялись только по push в dev, то есть уже
+# после мержа: сломанный pull request был зелёным до последнего момента, а падение
+# обнаруживалось на dev, когда образ уже собирался.
+on:
+  pull_request:
+
+# Новый пуш в ветку PR отменяет предыдущий прогон — иначе очередь копит проверки
+# коммитов, которые уже неактуальны.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    uses: ./.github/workflows/gate.yml

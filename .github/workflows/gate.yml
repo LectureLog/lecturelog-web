@@ -1,0 +1,48 @@
+name: Gate
+
+# Переиспользуемый workflow: один и тот же прогон вызывается и на pull request,
+# и перед публикацией образа. Вынесен отдельно намеренно — если бы проверки PR
+# и предпубликационный гейт были описаны двумя копиями, они бы со временем
+# разошлись, и получилось бы худшее из возможного: PR зелёный, а dev красный.
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: Сборка, vet, тесты
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Версия Tailwind CLI живёт в Makefile — берём её оттуда, чтобы ключ кэша
+      # инвалидировался ровно при обновлении версии, а не при любой правке Makefile.
+      - name: Определить версию Tailwind CLI
+        id: tw
+        run: echo "version=$(grep -m1 '^TAILWIND_VERSION' Makefile | awk '{print $3}')" >> "$GITHUB_OUTPUT"
+
+      # Цель tailwind-bin пропускает скачивание, если бинарь уже на месте,
+      # поэтому кэш экономит ~120 МБ загрузки на каждом прогоне.
+      - name: Кэш Tailwind CLI
+        uses: actions/cache@v6
+        with:
+          path: bin/tailwindcss
+          key: tailwind-${{ runner.os }}-${{ steps.tw.outputs.version }}
+
+      - name: Прогон гейта
+        run: make gate
+
+      # make gate перегенерирует templ и Tailwind. Если закоммиченные *_templ.go
+      # или static/css/app.css расходятся с результатом генерации — падаем здесь:
+      # в рантайме отдаётся именно закоммиченный артефакт, а не собранный на месте.
+      - name: Проверка детерминизма артефактов
+        run: git diff --exit-code
