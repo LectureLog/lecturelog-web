@@ -928,3 +928,179 @@ func TestSettingsPage_CoreUnavailable(t *testing.T) {
 		t.Error("форма загрузки должна оставаться видимой при coreUnavailable=true")
 	}
 }
+
+// ─── Футер: ссылки на проект ────────────────────────────────────────────────
+
+// parseHTML парсит отрендеренную страницу в дерево узлов.
+func parseHTML(t *testing.T, htmlStr string) *html.Node {
+	t.Helper()
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		t.Fatalf("html.Parse: %v", err)
+	}
+	return doc
+}
+
+// footerRoot возвращает узел <footer> из отрендеренного layout.
+func footerRoot(t *testing.T, doc *html.Node) *html.Node {
+	t.Helper()
+	var found *html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if found != nil {
+			return
+		}
+		if n.Type == html.ElementNode && n.DataAtom == atom.Footer {
+			found = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	if found == nil {
+		t.Fatal("в layout не найден элемент <footer>")
+	}
+	return found
+}
+
+// anchorNodes собирает в поддереве все теги <a>.
+func anchorNodes(root *html.Node) []*html.Node {
+	var result []*html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.A {
+			result = append(result, n)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	return result
+}
+
+// nodeText собирает текстовое содержимое поддерева.
+func nodeText(root *html.Node) string {
+	var sb strings.Builder
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.TextNode {
+			sb.WriteString(n.Data)
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(root)
+	return sb.String()
+}
+
+// TestFooter_ProjectLinks проверяет, что футер содержит ссылки на оба репозитория
+// проекта и на Telegram разработчика. Telegram — только иконка, без подписи,
+// поэтому его доступное имя должно жить в aria-label.
+func TestFooter_ProjectLinks(t *testing.T) {
+	want := []struct {
+		href     string
+		label    string
+		iconOnly bool
+	}{
+		{href: "https://github.com/LectureLog/lecturelog-core", label: "lecturelog-core"},
+		{href: "https://github.com/LectureLog/lecturelog-web", label: "lecturelog-web"},
+		{href: "https://t.me/fus1ond", label: "fus1ond", iconOnly: true},
+	}
+
+	footer := footerRoot(t, parseHTML(t, renderLayout(t, "Тест")))
+	anchors := anchorNodes(footer)
+
+	for _, w := range want {
+		var found *html.Node
+		for _, a := range anchors {
+			if attrVal(a, "href") == w.href {
+				found = a
+				break
+			}
+		}
+		if found == nil {
+			t.Errorf("в футере не найдена ссылка href=%q", w.href)
+			continue
+		}
+
+		text := strings.TrimSpace(nodeText(found))
+		if w.iconOnly {
+			if text != "" {
+				t.Errorf("ссылка %q должна быть только иконкой, но содержит текст %q", w.href, text)
+			}
+			if aria := attrVal(found, "aria-label"); !strings.Contains(aria, w.label) {
+				t.Errorf("ссылка-иконка %q: ожидается aria-label с %q, получено %q", w.href, w.label, aria)
+			}
+			continue
+		}
+		if !strings.Contains(text, w.label) {
+			t.Errorf("ссылка %q: ожидается подпись %q, получено %q", w.href, w.label, text)
+		}
+	}
+}
+
+// TestFooter_LinksHaveAccessibleName проверяет, что ни одна ссылка футера не
+// остаётся безымянной: у неё есть либо видимый текст, либо aria-label. Голая
+// иконка с aria-hidden внутри пустой ссылки читалась бы скринридером как URL.
+func TestFooter_LinksHaveAccessibleName(t *testing.T) {
+	footer := footerRoot(t, parseHTML(t, renderLayout(t, "Тест")))
+
+	for _, a := range anchorNodes(footer) {
+		text := strings.TrimSpace(nodeText(a))
+		if text == "" && strings.TrimSpace(attrVal(a, "aria-label")) == "" {
+			t.Errorf("ссылка href=%q без доступного имени: нет ни текста, ни aria-label", attrVal(a, "href"))
+		}
+	}
+}
+
+// TestFooter_ExternalLinksSecurity проверяет весь документ: любая ссылка,
+// открывающаяся в новой вкладке, обязана нести rel с noopener и noreferrer.
+// Тест сформулирован про все такие ссылки намеренно — он должен ловить
+// регрессию у любой будущей внешней ссылки, не только у ссылок футера.
+func TestFooter_ExternalLinksSecurity(t *testing.T) {
+	doc := parseHTML(t, renderLayout(t, "Тест"))
+
+	var blank int
+	for _, a := range anchorNodes(doc) {
+		if attrVal(a, "target") != "_blank" {
+			continue
+		}
+		blank++
+		rel := attrVal(a, "rel")
+		if !strings.Contains(rel, "noopener") || !strings.Contains(rel, "noreferrer") {
+			t.Errorf("ссылка href=%q с target=_blank должна иметь rel с noopener и noreferrer, получено rel=%q",
+				attrVal(a, "href"), rel)
+		}
+	}
+	if blank == 0 {
+		t.Error("ожидается хотя бы одна внешняя ссылка с target=\"_blank\"")
+	}
+}
+
+// TestFooter_ShowcaseLink проверяет, что внутренняя ссылка на витрину осталась
+// в футере, не открывается в новой вкладке и не зависит от авторизации.
+func TestFooter_ShowcaseLink(t *testing.T) {
+	for _, authed := range []bool{false, true} {
+		htmlStr := renderLayoutWithData(t, web.LayoutData{Title: "Тест", IsAuthed: authed})
+		footer := footerRoot(t, parseHTML(t, htmlStr))
+
+		var found *html.Node
+		for _, a := range anchorNodes(footer) {
+			if attrVal(a, "href") == "/hub" {
+				found = a
+				break
+			}
+		}
+		if found == nil {
+			t.Errorf("IsAuthed=%v: в футере не найдена ссылка на /hub", authed)
+			continue
+		}
+		if hasAttr(found, "target") {
+			t.Errorf("IsAuthed=%v: внутренняя ссылка на /hub не должна открываться в новой вкладке", authed)
+		}
+	}
+}

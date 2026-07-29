@@ -367,6 +367,17 @@ func Load(getenv func(string) string) (*Config, error)
 - Инлайн-скрипт (до first paint) читает `localStorage` и проставляет
   `data-theme` на `<html>` — анти-FOUC без вспышки дефолтной темы.
 
+**Внешние ссылки — только через обёртку.** Ссылка за пределы платформы рисуется
+компонентом-обёрткой (первая такая — `footerExtLink` в `layout.templ`), а не
+сырым `<a target="_blank">`: `rel="noopener noreferrer"` задаётся в одном месте,
+иначе новая вкладка получает доступ к `window.opener`. `href` передаётся
+выражением, а не строковым литералом, — только тогда templ прогоняет его через
+SafeURL-санитайзер. Сами адреса — константы в `internal/web/links.go` (не в
+`internal/config`: значения статические, а `web` осознанно не зависит от
+`config`). Правило под тестом: `TestFooter_ExternalLinksSecurity` проверяет `rel`
+у **любой** ссылки документа с `target="_blank"`, поэтому внешняя ссылка в обход
+обёртки уронит тесты.
+
 **Дизайн-токены.** Источник — `design/tokens.css` (пакет `design/`, style-guide
 платформы). Токены скопированы в `internal/web/assets/tokens.css` и подключены
 к Tailwind через директиву `@theme` (`var(--token)`); тёмная тема —

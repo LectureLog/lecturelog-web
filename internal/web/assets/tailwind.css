@@ -1842,6 +1842,44 @@
     border-bottom-color: var(--accent);
   }
 
+  /* Группа ссылок проекта: витрина, репозитории, контакт */
+  .ll-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+  }
+
+  /* Внешняя ссылка — брендовая иконка рядом с подписью */
+  .ll-footer-link--ext {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .ll-footer-link--ext svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+  }
+
+  /* Ссылка без подписи: подчёркивание под голой иконкой выглядит мусором,
+     поэтому вместо него — смена цвета. Padding держит область нажатия 24x24
+     (минимум по WCAG 2.5.8) при иконке 18px. */
+  .ll-footer-link--icon {
+    border-bottom: none;
+    padding: 3px;
+  }
+
+  .ll-footer-link--icon:hover {
+    border-bottom-color: transparent;
+  }
+
+  .ll-footer-link--icon svg {
+    width: 18px;
+    height: 18px;
+  }
+
   /* ─── Hero витрины (анонимный посетитель) ───────────────────────────────── */
 
   .ll-hero {
