@@ -124,9 +124,6 @@ func WantsMarkdown(r *http.Request) bool {
 		if mdPref.weight == 0 {
 			return false
 		}
-		if htmlPref.present && htmlPref.weight >= mdPref.weight {
-			return false
-		}
 		if mdPref.weight > htmlPref.weight {
 			return true
 		}
