@@ -267,19 +267,22 @@ func TestVisibilityToggle_ThreeState(t *testing.T) {
 		disabledOn []string
 	}{
 		{
-			name:   "личная",
-			vm:     web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true},
-			active: "private",
+			name:       "личная",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true},
+			active:     "private",
+			disabledOn: []string{"private"},
 		},
 		{
-			name:   "по ссылке",
-			vm:     web.LectureCardVM{ID: "x", Status: "ready", Visibility: "unlisted", CanPublish: true},
-			active: "unlisted",
+			name:       "по ссылке",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "unlisted", CanPublish: true},
+			active:     "unlisted",
+			disabledOn: []string{"unlisted"},
 		},
 		{
-			name:   "витрина",
-			vm:     web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true},
-			active: "public",
+			name:       "витрина",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true},
+			active:     "public",
+			disabledOn: []string{"public"},
 		},
 		{
 			name:       "неготовая лекция",
@@ -291,18 +294,13 @@ func TestVisibilityToggle_ThreeState(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var b bytes.Buffer
-			if err := web.LectureCard(tt.vm).Render(context.Background(), &b); err != nil {
-				t.Fatalf("LectureCard.Render: %v", err)
-			}
-			doc, err := html.Parse(strings.NewReader(b.String()))
-			if err != nil {
-				t.Fatalf("html.Parse: %v", err)
-			}
-
-			buttons := visibilityButtons(doc)
+			_, buttons := parseCardVisibility(t, tt.vm)
 			if len(buttons) != 3 {
 				t.Fatalf("кнопок переключателя = %d, ожидается 3", len(buttons))
+			}
+			disabledSet := make(map[string]bool, len(tt.disabledOn))
+			for _, v := range tt.disabledOn {
+				disabledSet[v] = true
 			}
 			for visibility, button := range buttons {
 				wantPressed := "false"
@@ -315,14 +313,9 @@ func TestVisibilityToggle_ThreeState(t *testing.T) {
 				if visibility == tt.active && !strings.Contains(attrVal(button, "class"), "ll-toggle--"+visibility) {
 					t.Errorf("активная кнопка %s без класса ll-toggle--%s: %q", visibility, visibility, attrVal(button, "class"))
 				}
-			}
-			for _, visibility := range tt.disabledOn {
-				if !hasAttr(buttons[visibility], "disabled") {
-					t.Errorf("%s: кнопка должна быть disabled для неготовой лекции", visibility)
+				if hasAttr(button, "disabled") != disabledSet[visibility] {
+					t.Errorf("%s: disabled = %v, ожидается %v", visibility, hasAttr(button, "disabled"), disabledSet[visibility])
 				}
-			}
-			if hasAttr(buttons["private"], "disabled") {
-				t.Error("private: возврат в «Личная» доступен всегда")
 			}
 		})
 	}

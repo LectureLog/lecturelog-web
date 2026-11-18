@@ -487,16 +487,25 @@ func TestLectureDB_SetVisibility_UnknownVisibility(t *testing.T) {
 }
 
 // TestLectureDB_ListPublic_ExcludesUnlisted проверяет, что лекции по ссылке
-// не попадают на Витрину даже после снятия с публикации в public.
+// не попадают на Витрину как без предварительной публикации (published_at IS NULL),
+// так и после снятия с публикации в public → unlisted (published_at IS NOT NULL).
 func TestLectureDB_ListPublic_ExcludesUnlisted(t *testing.T) {
 	ctx, userDB, lectureDB := setupLectureTestDB(t)
 
 	user := createTestUser(t, ctx, userDB, "hub-unlisted@example.com")
-	lec := createTestLecture(t, ctx, lectureDB, user.UserID, "По ссылке", "audio")
-	setReadyStatus(t, ctx, lectureDB.Pool, lec.LectureID)
+	directUnlisted := createTestLecture(t, ctx, lectureDB, user.UserID, "По ссылке сразу", "audio")
+	formerlyPublic := createTestLecture(t, ctx, lectureDB, user.UserID, "По ссылке после Витрины", "video")
+	setReadyStatus(t, ctx, lectureDB.Pool, directUnlisted.LectureID)
+	setReadyStatus(t, ctx, lectureDB.Pool, formerlyPublic.LectureID)
 
-	if _, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, "unlisted"); err != nil {
-		t.Fatalf("SetVisibility unlisted: %v", err)
+	if _, err := lectureDB.SetVisibility(ctx, directUnlisted.LectureID, user.UserID, "unlisted"); err != nil {
+		t.Fatalf("SetVisibility direct unlisted: %v", err)
+	}
+	if _, err := lectureDB.SetVisibility(ctx, formerlyPublic.LectureID, user.UserID, "public"); err != nil {
+		t.Fatalf("SetVisibility public: %v", err)
+	}
+	if _, err := lectureDB.SetVisibility(ctx, formerlyPublic.LectureID, user.UserID, "unlisted"); err != nil {
+		t.Fatalf("SetVisibility public->unlisted: %v", err)
 	}
 
 	rows, err := lectureDB.ListPublic(ctx, 10)

@@ -78,7 +78,9 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 						<span>{ readerDurationLabel(vm.Duration) }</span>
 						if vm.IsOwner {
 							<span class="ll-reader-owner">Владелец</span>
-							<span class={ "ll-reader-visibility", "ll-reader-visibility--" + vm.Visibility }>{ readerVisibilityLabel(vm.Visibility) }</span>
+							if readerVisibilityLabel(vm.Visibility) != "" {
+								<span class={ "ll-reader-visibility", "ll-reader-visibility--" + vm.Visibility }>{ readerVisibilityLabel(vm.Visibility) }</span>
+							}
 						}
 					</div>
 					<div class="ll-reader-reading"><span>Прочитано</span><strong id="readerReadPercent">0%</strong><div><i id="readerReadBar"></i></div></div>

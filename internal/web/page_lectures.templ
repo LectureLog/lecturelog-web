@@ -189,54 +189,34 @@ templ LectureTitleInline(vm LectureCardVM) {
 
 // LectureVisibilityToggle — трёхпозиционный переключатель видимости лекции:
 // «Личная» (private) / «По ссылке» (unlisted) / «Витрина» (public).
-// Каждая кнопка шлёт hx-post с целевым значением и перерисовывает карточку.
-// Для неготовой лекции (processing/failed) доступен только возврат в «Личная»:
-// кнопки unlisted и public заблокированы.
+// Каждая неактивная кнопка шлёт hx-post с целевым значением и перерисовывает карточку;
+// уже выбранный сегмент заблокирован, чтобы повторный клик не вызывал лишний запрос.
+// Для неготовой лекции (processing/failed) доступен только возврат в «Личная».
 templ LectureVisibilityToggle(vm LectureCardVM) {
 	<div class="ll-toggle-group" role="group" aria-label="Видимость лекции">
-		<button
-			type="button"
-			class={ "ll-toggle", "ll-toggle--private", templ.KV("ll-toggle--active", vm.Visibility == "private") }
-			hx-post={ "/lectures/" + vm.ID + "/visibility" }
-			hx-vals={ visibilityVals("private") }
-			hx-target={ "#lec-" + vm.ID }
-			hx-swap="outerHTML"
-			aria-pressed={ pressedAttr(vm.Visibility == "private") }
-			aria-label="Личная лекция — доступна только вам"
-			title="Личная лекция"
-		>
-			Личная
-		</button>
-		<button
-			type="button"
-			class={ "ll-toggle", "ll-toggle--unlisted", templ.KV("ll-toggle--active", vm.Visibility == "unlisted") }
-			hx-post={ "/lectures/" + vm.ID + "/visibility" }
-			hx-vals={ visibilityVals("unlisted") }
-			hx-target={ "#lec-" + vm.ID }
-			hx-swap="outerHTML"
-			disabled?={ !vm.CanPublish }
-			aria-pressed={ pressedAttr(vm.Visibility == "unlisted") }
-			aria-label="Лекция по ссылке — открыта всем, кто знает URL, но скрыта с Витрины"
-			title="Лекция по ссылке"
-		>
-			По ссылке
-		</button>
-		<button
-			type="button"
-			class={ "ll-toggle", "ll-toggle--public", templ.KV("ll-toggle--active", vm.Visibility == "public") }
-			hx-post={ "/lectures/" + vm.ID + "/visibility" }
-			hx-vals={ visibilityVals("public") }
-			hx-target={ "#lec-" + vm.ID }
-			hx-swap="outerHTML"
-			disabled?={ !vm.CanPublish }
-			{ publicConfirmAttrs(vm)... }
-			aria-pressed={ pressedAttr(vm.Visibility == "public") }
-			aria-label="Публичная лекция — на Витрине, видна всем"
-			title="Опубликовать на Витрине"
-		>
-			Витрина
-		</button>
+		@visibilitySegment(vm, "private", "Личная", "Личная лекция", "Личная лекция — доступна только вам", nil)
+		@visibilitySegment(vm, "unlisted", "По ссылке", "Лекция по ссылке", "Лекция по ссылке — открыта всем, кто знает URL, но скрыта с Витрины", nil)
+		@visibilitySegment(vm, "public", "Витрина", "Опубликовать на Витрине", "Публичная лекция — на Витрине, видна всем", publicConfirmAttrs(vm))
 	</div>
+}
+
+// visibilitySegment — одна кнопка трёхпозиционного переключателя видимости.
+templ visibilitySegment(vm LectureCardVM, target, label, titleText, ariaLabel string, extraAttrs templ.Attributes) {
+	<button
+		type="button"
+		class={ "ll-toggle", "ll-toggle--" + target, templ.KV("ll-toggle--active", vm.Visibility == target) }
+		hx-post={ "/lectures/" + vm.ID + "/visibility" }
+		hx-vals={ visibilityVals(target) }
+		hx-target={ "#lec-" + vm.ID }
+		hx-swap="outerHTML"
+		disabled?={ vm.Visibility == target || (target != "private" && !vm.CanPublish) }
+		{ extraAttrs... }
+		aria-pressed={ pressedAttr(vm.Visibility == target) }
+		aria-label={ ariaLabel }
+		title={ titleText }
+	>
+		{ label }
+	</button>
 }
 
 // LectureShareButton — копирование ссылки на читалку (для unlisted и public).

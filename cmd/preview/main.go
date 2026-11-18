@@ -176,6 +176,10 @@ func readerVM(dir, title, kind string, isOwner bool) (web.ReaderVM, error) {
 	if sourceTitle == "" {
 		sourceTitle = title
 	}
+	visibility := "public"
+	if isOwner {
+		visibility = "private"
+	}
 	vm := web.ReaderVM{
 		LectureID:   dir,
 		Title:       title,
@@ -183,6 +187,7 @@ func readerVM(dir, title, kind string, isOwner bool) (web.ReaderVM, error) {
 		SourceKind:  kind,
 		Duration:    int(structure.Source.Duration),
 		IsOwner:     isOwner,
+		Visibility:  visibility,
 	}
 
 	mediaIndex, slideIndex := 0, 0

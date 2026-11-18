@@ -562,9 +562,13 @@
     color: var(--accent);
   }
 
-  .ll-toggle:disabled {
+  .ll-toggle:disabled:not(.ll-toggle--active) {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .ll-toggle--active:disabled {
+    cursor: default;
   }
 
   .ll-toggle--public {
