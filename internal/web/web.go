@@ -87,6 +87,14 @@ func NewRouter(opts ...Option) http.Handler {
 	}
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(sfs)))
 
+	// Правила обхода для ИИ-краулеров и поисковых роботов: публичные и
+	// ссылочные разделы открыты, служебные — закрыты.
+	r.Get("/robots.txt", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(robotsTxt))
+	})
+
 	// Главная — лендинг сервиса: hero, свежие публичные конспекты, форматы.
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		var examples []HubCardVM

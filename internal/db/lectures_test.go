@@ -371,6 +371,152 @@ func TestLectureDB_SetVisibility_PrivateNoPublishedAtReset(t *testing.T) {
 	}
 }
 
+// TestLectureDB_SetVisibility_UnlistedOnReady проверяет открытие готовой лекции
+// по ссылке: visibility=unlisted и published_at остаётся NULL.
+func TestLectureDB_SetVisibility_UnlistedOnReady(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "unlisted@example.com")
+	lec := createTestLecture(t, ctx, lectureDB, user.UserID, "Лекция по ссылке", "audio")
+	setReadyStatus(t, ctx, lectureDB.Pool, lec.LectureID)
+
+	affected, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, "unlisted")
+	if err != nil {
+		t.Fatalf("SetVisibility unlisted: %v", err)
+	}
+	if affected != 1 {
+		t.Errorf("SetVisibility unlisted affected = %d, ожидается 1", affected)
+	}
+
+	updated, err := lectureDB.FindByID(ctx, lec.LectureID)
+	if err != nil {
+		t.Fatalf("FindByID после unlisted: %v", err)
+	}
+	if updated.Visibility != "unlisted" {
+		t.Errorf("Visibility = %q, ожидается unlisted", updated.Visibility)
+	}
+	if updated.PublishedAt != nil {
+		t.Errorf("PublishedAt = %v, ожидается nil: переход в unlisted не публикует лекцию", *updated.PublishedAt)
+	}
+}
+
+// TestLectureDB_SetVisibility_UnlistedKeepsPublishedAt проверяет, что исторический
+// published_at сохраняется при цепочке public → unlisted → private.
+func TestLectureDB_SetVisibility_UnlistedKeepsPublishedAt(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "unlisted-history@example.com")
+	lec := createTestLecture(t, ctx, lectureDB, user.UserID, "История публикации", "audio")
+	setReadyStatus(t, ctx, lectureDB.Pool, lec.LectureID)
+
+	if _, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, "public"); err != nil {
+		t.Fatalf("SetVisibility public: %v", err)
+	}
+	published, err := lectureDB.FindByID(ctx, lec.LectureID)
+	if err != nil || published.PublishedAt == nil {
+		t.Fatalf("после публикации PublishedAt = %v, err = %v", published, err)
+	}
+	savedPublishedAt := *published.PublishedAt
+
+	for _, visibility := range []string{"unlisted", "private"} {
+		affected, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, visibility)
+		if err != nil {
+			t.Fatalf("SetVisibility %s: %v", visibility, err)
+		}
+		if affected != 1 {
+			t.Fatalf("SetVisibility %s affected = %d, ожидается 1", visibility, affected)
+		}
+
+		updated, err := lectureDB.FindByID(ctx, lec.LectureID)
+		if err != nil {
+			t.Fatalf("FindByID после %s: %v", visibility, err)
+		}
+		if updated.Visibility != visibility {
+			t.Errorf("Visibility = %q, ожидается %q", updated.Visibility, visibility)
+		}
+		if updated.PublishedAt == nil {
+			t.Fatalf("PublishedAt обнулился при переходе в %s", visibility)
+		}
+		if !updated.PublishedAt.Equal(savedPublishedAt) {
+			t.Errorf("PublishedAt изменился при переходе в %s: было %v, стало %v", visibility, savedPublishedAt, *updated.PublishedAt)
+		}
+	}
+}
+
+// TestLectureDB_SetVisibility_UnlistedOnNotReady проверяет отказ открыть по ссылке
+// неготовую лекцию: affected=0 для processing и failed.
+func TestLectureDB_SetVisibility_UnlistedOnNotReady(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "unlisted-not-ready@example.com")
+
+	processing := createTestLecture(t, ctx, lectureDB, user.UserID, "В обработке", "audio") // статус по умолчанию processing
+	failed := createTestLecture(t, ctx, lectureDB, user.UserID, "С ошибкой", "audio")
+	setFailedStatus(t, ctx, lectureDB.Pool, failed.LectureID, "processing_error")
+
+	for _, lec := range []*LectureRow{processing, failed} {
+		affected, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, "unlisted")
+		if err != nil {
+			t.Fatalf("SetVisibility unlisted для статуса %q: %v", lec.Status, err)
+		}
+		if affected != 0 {
+			t.Errorf("SetVisibility unlisted для статуса %q: affected = %d, ожидается 0", lec.Status, affected)
+		}
+	}
+}
+
+// TestLectureDB_SetVisibility_UnknownVisibility проверяет, что неизвестное значение
+// видимости отвергается без изменения строки.
+func TestLectureDB_SetVisibility_UnknownVisibility(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "unknown-visibility@example.com")
+	lec := createTestLecture(t, ctx, lectureDB, user.UserID, "Неизвестная видимость", "audio")
+
+	if _, err := lectureDB.SetVisibility(ctx, lec.LectureID, user.UserID, "shared"); err == nil {
+		t.Fatal("SetVisibility с неизвестной видимостью: ожидается ошибка")
+	}
+
+	row, err := lectureDB.FindByID(ctx, lec.LectureID)
+	if err != nil {
+		t.Fatalf("FindByID: %v", err)
+	}
+	if row.Visibility != "private" {
+		t.Errorf("Visibility = %q, ожидается private (значение не изменилось)", row.Visibility)
+	}
+}
+
+// TestLectureDB_ListPublic_ExcludesUnlisted проверяет, что лекции по ссылке
+// не попадают на Витрину как без предварительной публикации (published_at IS NULL),
+// так и после снятия с публикации в public → unlisted (published_at IS NOT NULL).
+func TestLectureDB_ListPublic_ExcludesUnlisted(t *testing.T) {
+	ctx, userDB, lectureDB := setupLectureTestDB(t)
+
+	user := createTestUser(t, ctx, userDB, "hub-unlisted@example.com")
+	directUnlisted := createTestLecture(t, ctx, lectureDB, user.UserID, "По ссылке сразу", "audio")
+	formerlyPublic := createTestLecture(t, ctx, lectureDB, user.UserID, "По ссылке после Витрины", "video")
+	setReadyStatus(t, ctx, lectureDB.Pool, directUnlisted.LectureID)
+	setReadyStatus(t, ctx, lectureDB.Pool, formerlyPublic.LectureID)
+
+	if _, err := lectureDB.SetVisibility(ctx, directUnlisted.LectureID, user.UserID, "unlisted"); err != nil {
+		t.Fatalf("SetVisibility direct unlisted: %v", err)
+	}
+	if _, err := lectureDB.SetVisibility(ctx, formerlyPublic.LectureID, user.UserID, "public"); err != nil {
+		t.Fatalf("SetVisibility public: %v", err)
+	}
+	if _, err := lectureDB.SetVisibility(ctx, formerlyPublic.LectureID, user.UserID, "unlisted"); err != nil {
+		t.Fatalf("SetVisibility public->unlisted: %v", err)
+	}
+
+	rows, err := lectureDB.ListPublic(ctx, 10)
+	if err != nil {
+		t.Fatalf("ListPublic: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("ListPublic: len = %d, ожидается 0 — unlisted не попадает на Витрину", len(rows))
+	}
+}
+
 // TestLectureDB_Delete_Owner проверяет hard-delete своей лекции.
 func TestLectureDB_Delete_Owner(t *testing.T) {
 	ctx, userDB, lectureDB := setupLectureTestDB(t)

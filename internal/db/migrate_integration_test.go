@@ -194,6 +194,23 @@ func TestMigrateIntegration(t *testing.T) {
 		t.Fatal("enum lecture_visibility не найден в pg_type")
 	}
 
+	// Проверяем, что миграция 005 добавила третье значение видимости 'unlisted'.
+	var hasUnlisted bool
+	err = pool.QueryRow(ctx,
+		`SELECT EXISTS (
+			SELECT 1 FROM pg_enum e
+			JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'lecture_visibility'
+			  AND e.enumlabel = 'unlisted'
+		)`,
+	).Scan(&hasUnlisted)
+	if err != nil {
+		t.Fatalf("запрос pg_enum для lecture_visibility: %v", err)
+	}
+	if !hasUnlisted {
+		t.Fatal("значение 'unlisted' не найдено в pg_enum для lecture_visibility")
+	}
+
 	// Проверяем наличие enum lecture_source_kind
 	err = pool.QueryRow(ctx,
 		`SELECT EXISTS (

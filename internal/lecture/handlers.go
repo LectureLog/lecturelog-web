@@ -1,6 +1,7 @@
 package lecture
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -96,7 +97,7 @@ func (s *Service) handleRename(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleSetVisibility обрабатывает POST /lectures/{id}/visibility.
-// Ожидает form-поле "visibility" (private|public). Возвращает обновлённую карточку.
+// Ожидает form-поле "visibility" (private|unlisted|public). Возвращает обновлённую карточку.
 func (s *Service) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 	user := auth.UserFromContext(r.Context())
 	if user == nil {
@@ -113,11 +114,14 @@ func (s *Service) handleSetVisibility(w http.ResponseWriter, r *http.Request) {
 
 	lec, err := s.SetVisibility(r.Context(), lectureID, user.ID, vis)
 	if err != nil {
-		if err == ErrNotReady {
-			http.Error(w, "публикация возможна только для готовой лекции", http.StatusConflict)
+		switch {
+		case errors.Is(err, ErrInvalidVisibility):
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
-		}
-		if err == ErrNotFound {
+		case errors.Is(err, ErrNotReady):
+			http.Error(w, "открыть лекцию можно только после готовности", http.StatusConflict)
+			return
+		case errors.Is(err, ErrNotFound):
 			http.Error(w, "не найдена", http.StatusNotFound)
 			return
 		}
@@ -255,8 +259,12 @@ func formatDate(t time.Time) string {
 }
 
 // isUserError проверяет, является ли ошибка пользовательской (валидационной).
+// ErrInvalidVisibility сюда не входит: для неё хендлер отдаёт отдельный 400.
 func isUserError(err error) bool {
-	// Ошибки домена (кроме not-found) считаем пользовательскими
-	return err != ErrNotFound && err != nil &&
-		err != ErrNotFailed && err != ErrNotReady && err != ErrNoRetrySource
+	return err != nil &&
+		!errors.Is(err, ErrNotFound) &&
+		!errors.Is(err, ErrNotFailed) &&
+		!errors.Is(err, ErrNotReady) &&
+		!errors.Is(err, ErrNoRetrySource) &&
+		!errors.Is(err, ErrInvalidVisibility)
 }

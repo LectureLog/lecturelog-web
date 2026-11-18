@@ -87,6 +87,27 @@
   .ll-reader-source-card { display: flex; flex-direction: column; gap: 8px; padding: 16px; border: 1px solid var(--border); border-radius: var(--r-card); background: var(--surface); font-size: 13px; color: var(--text-2); }
   .ll-reader-source-card strong { color: var(--ink); font-size: 14px; }
   .ll-reader-owner { color: var(--accent); font-weight: 600; }
+
+  /* Бейдж текущей видимости лекции в карточке источника (только владельцу) */
+  .ll-reader-visibility {
+    display: inline-flex;
+    align-items: center;
+    padding: 1px 8px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    background: var(--surface-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .ll-reader-visibility--unlisted { border-color: var(--border-2); }
+
+  .ll-reader-visibility--public {
+    background: var(--accent-soft);
+    border-color: var(--accent-soft);
+    color: var(--accent);
+  }
   .ll-reader-reading { margin: 20px 0 25px; color: var(--text-3); font-size: 12px; }
   .ll-reader-reading strong { float: right; color: var(--text-2); font-variant-numeric: tabular-nums; }
   .ll-reader-reading div { clear: both; height: 4px; margin-top: 9px; overflow: hidden; border-radius: var(--r-track); background: var(--rail); }
@@ -541,12 +562,48 @@
     color: var(--accent);
   }
 
-  .ll-toggle:disabled {
+  .ll-toggle:disabled:not(.ll-toggle--active) {
     opacity: 0.5;
     cursor: not-allowed;
   }
 
-  .ll-toggle--public {
+  .ll-toggle--active:disabled {
+    cursor: default;
+  }
+
+  /* Трёхпозиционный переключатель видимости: Личная | По ссылке | Витрина.
+     Кнопки сегментированы в общую пилюлю; активная помечена aria-pressed. */
+  .ll-toggle-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px;
+    border: 1px solid var(--border);
+    border-radius: var(--r-pill);
+    background: var(--surface-2);
+  }
+
+  .ll-toggle-group .ll-toggle {
+    padding: 2px 9px;
+    min-height: 22px;
+    border-color: transparent;
+    background: transparent;
+    font-size: 11.5px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+
+  .ll-toggle--active[aria-pressed="true"] {
+    background: var(--surface);
+    border-color: var(--border);
+    color: var(--text-2);
+  }
+
+  .ll-toggle--unlisted[aria-pressed="true"] {
+    border-color: var(--border-2);
+  }
+
+  .ll-toggle--public[aria-pressed="true"] {
     background: var(--accent-soft);
     border-color: var(--accent-soft);
     color: var(--accent);

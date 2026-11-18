@@ -51,15 +51,22 @@ func (s *Service) Rename(ctx context.Context, lectureID, ownerID, title string) 
 }
 
 // SetVisibility меняет видимость лекции.
-// Для public: лекция должна быть в статусе ready (иначе ErrNotReady).
+// Для public и unlisted: лекция должна быть в статусе ready (иначе ErrNotReady).
 // Для private: снятие с публикации в любой момент; published_at не обнуляем.
+// Неизвестное значение видимости — ErrInvalidVisibility (400 на границе HTTP).
 func (s *Service) SetVisibility(ctx context.Context, lectureID, ownerID string, vis Visibility) (Lecture, error) {
+	switch vis {
+	case VisibilityPrivate, VisibilityUnlisted, VisibilityPublic:
+	default:
+		return Lecture{}, ErrInvalidVisibility
+	}
+
 	affected, err := s.repo.SetVisibility(ctx, lectureID, ownerID, string(vis))
 	if err != nil {
 		return Lecture{}, fmt.Errorf("lecture: SetVisibility: %w", err)
 	}
 	if affected == 0 {
-		if vis == VisibilityPublic {
+		if vis == VisibilityPublic || vis == VisibilityUnlisted {
 			// Нужно различить: лекция не существует/чужая vs существует но не ready.
 			// FindByID без фильтра owner_id невозможен через Repository.
 			// Используем FindByID — адаптер вернёт то, что принадлежит или что нашлось.

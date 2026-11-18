@@ -13,6 +13,8 @@ type ReaderVM struct {
 	SourceKind  string
 	Duration    int
 	IsOwner     bool
+	// Visibility — видимость лекции: private|unlisted|public.
+	Visibility  string
 	Sections    []ReaderSectionVM
 }
 
@@ -55,7 +57,7 @@ type ReaderMediaVM struct {
 
 // ReaderPage — страница «Читальный зал» с навигацией по конспекту.
 templ ReaderPage(data LayoutData, vm ReaderVM) {
-	@Layout(data, ReaderActions(vm)) {
+	@Layout(withReaderHead(data, vm.LectureID), ReaderActions(vm)) {
 		<div class="ll-reader" id="reader">
 			<div class="ll-reader-progress" aria-hidden="true"><div id="readerProgress"></div></div>
 			<div class="ll-reader-search" id="readerSearch" hidden>
@@ -76,6 +78,9 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 						<span>{ readerDurationLabel(vm.Duration) }</span>
 						if vm.IsOwner {
 							<span class="ll-reader-owner">Владелец</span>
+							if readerVisibilityLabel(vm.Visibility) != "" {
+								<span class={ "ll-reader-visibility", "ll-reader-visibility--" + vm.Visibility }>{ readerVisibilityLabel(vm.Visibility) }</span>
+							}
 						}
 					</div>
 					<div class="ll-reader-reading"><span>Прочитано</span><strong id="readerReadPercent">0%</strong><div><i id="readerReadBar"></i></div></div>
@@ -180,6 +185,16 @@ templ ReaderActions(vm ReaderVM) {
 		</span>
 	</button>
 	<a class="ll-reader-export" href={ "/read/" + vm.LectureID + "/export" }>Экспорт</a>
+	<a class="ll-reader-export" href={ "/read/" + vm.LectureID + ".md" } title="Агентское представление (Markdown)" aria-label="Открыть конспект в Markdown для ИИ-агента">MD</a>
+}
+
+// withReaderHead дополняет LayoutData ссылкой на Агентское представление
+// Конспекта, чтобы <head> всегда предлагал машиночитаемую альтернативу.
+func withReaderHead(data LayoutData, lectureID string) LayoutData {
+	if data.AlternateMarkdownURL == "" && lectureID != "" {
+		data.AlternateMarkdownURL = "/read/" + lectureID + ".md"
+	}
+	return data
 }
 
 // ReaderMedia — нативный медиа-плеер с временным диапазоном фрагмента.
@@ -250,4 +265,19 @@ func readerSourceLabel(kind string) string {
 		return "Аудио"
 	}
 	return "Видео"
+}
+
+// readerVisibilityLabel возвращает локализованную метку видимости лекции
+// для бейджа в карточке источника (виден только владельцу).
+func readerVisibilityLabel(visibility string) string {
+	switch visibility {
+	case "private":
+		return "Личная"
+	case "unlisted":
+		return "По ссылке"
+	case "public":
+		return "Публичная"
+	default:
+		return ""
+	}
 }

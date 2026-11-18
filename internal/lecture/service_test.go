@@ -2,6 +2,7 @@ package lecture_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -261,6 +262,88 @@ func TestService_SetVisibility_Private(t *testing.T) {
 	}
 	if lec.Visibility != lecture.VisibilityPrivate {
 		t.Errorf("Visibility = %q, ожидается %q", lec.Visibility, lecture.VisibilityPrivate)
+	}
+}
+
+// TestService_SetVisibility_UnlistedOnReady проверяет открытие готовой лекции по ссылке.
+func TestService_SetVisibility_UnlistedOnReady(t *testing.T) {
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, visibility string) (int64, error) {
+			if visibility != string(lecture.VisibilityUnlisted) {
+				t.Errorf("SetVisibility visibility = %q, ожидается unlisted", visibility)
+			}
+			return 1, nil
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID:         "lec-1",
+				OwnerID:    "user-1",
+				Status:     lecture.StatusReady,
+				Visibility: lecture.VisibilityUnlisted,
+			}, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	lec, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityUnlisted)
+	if err != nil {
+		t.Fatalf("SetVisibility unlisted на ready: %v", err)
+	}
+	if lec.Visibility != lecture.VisibilityUnlisted {
+		t.Errorf("Visibility = %q, ожидается %q", lec.Visibility, lecture.VisibilityUnlisted)
+	}
+}
+
+// TestService_SetVisibility_UnlistedOnProcessing проверяет, что unlisted на не-ready → ErrNotReady.
+func TestService_SetVisibility_UnlistedOnProcessing(t *testing.T) {
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil // affected=0 → статус не ready
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lecture.Lecture{
+				ID:         "lec-1",
+				OwnerID:    "user-1",
+				Status:     lecture.StatusProcessing,
+				Visibility: lecture.VisibilityPrivate,
+			}, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityUnlisted)
+	if !errors.Is(err, lecture.ErrNotReady) {
+		t.Errorf("ошибка = %v, ожидается ErrNotReady", err)
+	}
+}
+
+// TestService_SetVisibility_Invalid проверяет, что неизвестное значение видимости
+// отвергается доменом до обращения к репозиторию.
+func TestService_SetVisibility_Invalid(t *testing.T) {
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			t.Error("SetVisibility репозитория не должен вызываться при невалидном значении")
+			return 1, nil
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	for _, vis := range []lecture.Visibility{"shared", "", "PUBLIC"} {
+		_, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", vis)
+		if !errors.Is(err, lecture.ErrInvalidVisibility) {
+			t.Errorf("SetVisibility(%q) ошибка = %v, ожидается ErrInvalidVisibility", vis, err)
+		}
+	}
+}
+
+// TestService_SetVisibility_PrivateNotOwner проверяет: снятие чужой лекции → ErrNotFound.
+func TestService_SetVisibility_PrivateNotOwner(t *testing.T) {
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil // owner_id в WHERE не совпал
+		},
+	}
+	svc := lecture.NewService(repo, &mockCore{})
+	_, err := svc.SetVisibility(context.Background(), "lec-1", "user-1", lecture.VisibilityPrivate)
+	if !errors.Is(err, lecture.ErrNotFound) {
+		t.Errorf("ошибка = %v, ожидается ErrNotFound", err)
 	}
 }
 

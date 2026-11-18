@@ -191,7 +191,11 @@ func main() {
 		&lectureRepo{lectures: lectureDB},
 		&coreTasksAdapter{core: core},
 	)
-	hubSvc := hub.NewService(&hubRepo{lectures: lectureDB}, 0)
+	hubSvc := hub.NewService(
+		&hubRepo{lectures: lectureDB},
+		0,
+		hub.WithBaseOrigin(web.OriginFromCallbackURL(cfg.OAuth.CallbackURL)),
+	)
 	s3Client, err := s3.New(s3.Config{
 		Endpoint:  cfg.CoreMinIO.Endpoint,
 		AccessKey: cfg.CoreMinIO.AccessKey,
@@ -209,7 +213,7 @@ func main() {
 		reader.NewMarkdownRenderer(),
 		cfg.PresignedTTL,
 	)
-	readerHandlers := reader.NewHandlers(readerSvc, core)
+	readerHandlers := reader.NewHandlers(readerSvc, core, reader.WithBaseOrigin(web.OriginFromCallbackURL(cfg.OAuth.CallbackURL)))
 
 	// CSRF-ключ генерируется на старте (32 случайных байта).
 	// ДОЛГ: для прод-стабильности вынести в env (PLATFORM_CSRF_KEY) — рестарт инвалидирует токены.

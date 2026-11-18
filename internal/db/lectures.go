@@ -25,7 +25,7 @@ type LectureRow struct {
 	Status string
 	// ErrorCode — код ошибки ядра при failed; "" если NULL (COALESCE).
 	ErrorCode string
-	// Visibility — видимость: private|public.
+	// Visibility — видимость: private|unlisted|public.
 	Visibility string
 	// SourceKind — тип источника: audio|video|video_url.
 	SourceKind string
@@ -243,32 +243,39 @@ func (db *LectureDB) Rename(ctx context.Context, lectureID, ownerID, title strin
 
 // SetVisibility меняет видимость лекции.
 //   - public: WHERE owner_id=? AND status='ready'; SET published_at = now() (обновляем при каждой публикации).
+//   - unlisted: WHERE owner_id=? AND status='ready'; published_at НЕ трогаем (историческое значение сохраняется).
 //   - private: WHERE owner_id=?; published_at НЕ обнуляем (§8: снятие в любой момент).
 //
-// Возвращает affected (0 при public+не-ready → домен трактует как «нельзя опубликовать»).
+// Возвращает affected (0 при public/unlisted + не-ready → домен трактует как «нельзя открыть»).
 func (db *LectureDB) SetVisibility(ctx context.Context, lectureID, ownerID, visibility string) (int64, error) {
 	var q string
-	var args []any
-
-	if visibility == "public" {
+	switch visibility {
+	case "public":
 		// Публикация только готовых лекций; обновляем published_at при каждой публикации
 		q = `
             UPDATE lectures
             SET visibility = 'public', published_at = now(), updated_at = now()
             WHERE lecture_id = $1 AND owner_id = $2 AND status = 'ready'
         `
-		args = []any{lectureID, ownerID}
-	} else {
+	case "unlisted":
+		// Открытие по ссылке только готовых лекций; published_at сохраняем как есть
+		q = `
+            UPDATE lectures
+            SET visibility = 'unlisted', updated_at = now()
+            WHERE lecture_id = $1 AND owner_id = $2 AND status = 'ready'
+        `
+	case "private":
 		// Снятие с публикации: published_at сохраняем (§8: повторная публикация перепишет)
 		q = `
             UPDATE lectures
             SET visibility = 'private', updated_at = now()
             WHERE lecture_id = $1 AND owner_id = $2
         `
-		args = []any{lectureID, ownerID}
+	default:
+		return 0, fmt.Errorf("db: SetVisibility: неизвестная видимость %q", visibility)
 	}
 
-	tag, err := db.Pool.Exec(ctx, q, args...)
+	tag, err := db.Pool.Exec(ctx, q, lectureID, ownerID)
 	if err != nil {
 		return 0, fmt.Errorf("db: SetVisibility: %w", err)
 	}

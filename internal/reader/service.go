@@ -12,19 +12,15 @@ import (
 func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderView, error) {
 	lecture, isOwner, err := s.accessLecture(ctx, lectureID, viewerID)
 	if err != nil {
+		if lecture != nil {
+			return ReaderView{Visibility: lecture.Visibility}, err
+		}
 		return ReaderView{}, err
 	}
 
-	// Ядро кладёт выход задачи под results/<taskID>/output/ (см. контракт пути
-	// выхода core). Сегмент output/ обязателен, иначе GetObject вернёт NoSuchKey.
-	structureKey := "results/" + lecture.CoreTaskID + "/output/structure.json"
-	b, err := s.store.GetObject(ctx, structureKey)
+	structure, err := s.loadStructure(ctx, lecture.CoreTaskID)
 	if err != nil {
-		return ReaderView{}, fmt.Errorf("%w: прочитать structure.json: %v", ErrCoreUnavailable, err)
-	}
-	structure, err := ParseStructure(b)
-	if err != nil {
-		return ReaderView{}, err
+		return ReaderView{Visibility: lecture.Visibility}, err
 	}
 
 	// Ядро может не знать названия источника (title: null) — показываем
@@ -42,6 +38,7 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 		Duration:    int(structure.Source.Duration),
 		Sections:    make([]ViewSection, 0, len(structure.Sections)),
 		IsOwner:     isOwner,
+		Visibility:  lecture.Visibility,
 	}
 	for sectionIndex, section := range structure.Sections {
 		viewSection := ViewSection{
@@ -72,6 +69,10 @@ func (s *Service) AccessTaskID(ctx context.Context, lectureID, viewerID string) 
 }
 
 // accessLecture централизует проверку доступа для чтения и экспорта.
+// Готовая лекция открыта владельцу при любой видимости, а всем остальным
+// (включая анонимов) — при unlisted и public. Личная лекция (private) для
+// не-владельца неотличима от несуществующей: возврат в private мгновенно
+// закрывает внешний доступ к /read/{id} и /read/{id}/export.
 func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string) (*LectureMeta, bool, error) {
 	lecture, err := s.repo.FindByID(ctx, lectureID)
 	if err != nil {
@@ -84,14 +85,28 @@ func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string)
 	isOwner := viewerID != "" && viewerID == lecture.OwnerID
 	if lecture.Status != "ready" {
 		if isOwner {
-			return nil, false, ErrNotReady
+			return lecture, true, ErrNotReady
 		}
 		return nil, false, ErrNotFound
 	}
-	if lecture.Visibility == "private" && !isOwner {
+	// Личная лекция (и любое неизвестное состояние видимости) скрыта от всех,
+	// кроме владельца; только unlisted и public открыты по прямой ссылке.
+	if lecture.Visibility != "public" && lecture.Visibility != "unlisted" && !isOwner {
 		return nil, false, ErrNotFound
 	}
 	return lecture, isOwner, nil
+}
+
+// loadStructure читает и разбирает structure.json результата задачи ядра.
+func (s *Service) loadStructure(ctx context.Context, coreTaskID string) (Structure, error) {
+	// Ядро кладёт выход задачи под results/<taskID>/output/ (см. контракт пути
+	// выхода core). Сегмент output/ обязателен, иначе GetObject вернёт NoSuchKey.
+	structureKey := "results/" + coreTaskID + "/output/structure.json"
+	b, err := s.store.GetObject(ctx, structureKey)
+	if err != nil {
+		return Structure{}, fmt.Errorf("%w: прочитать structure.json: %v", ErrCoreUnavailable, err)
+	}
+	return ParseStructure(b)
 }
 
 func (s *Service) buildSubtopic(ctx context.Context, sectionNumber, subtopicNumber int, subtopic Subtopic) (ViewSubtopic, error) {

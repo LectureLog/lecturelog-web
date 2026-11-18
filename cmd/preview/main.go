@@ -134,6 +134,7 @@ func hubCards() []web.HubCardVM {
 func lectureCards() []web.LectureCardVM {
 	return []web.LectureCardVM{
 		{ID: "video", Title: "Кодинг с ИИ: практика внедрения", Status: "ready", StatusLabel: "Готово", Visibility: "public", SourceKind: "video", CanPublish: true, UpdatedAt: "30 Jun 2026"},
+		{ID: "unlisted", Title: "Алгоритмы: динамическое программирование", Status: "ready", StatusLabel: "Готово", Visibility: "unlisted", SourceKind: "video", CanPublish: true, UpdatedAt: "4 Jul 2026"},
 		{ID: "a2", Title: "ОС: планировщик", Status: "processing", StatusLabel: "Обработка", Visibility: "private", SourceKind: "video", ProgressPct: 62, StageLabel: "Распознавание речи", UpdatedAt: "2 Jul 2026"},
 		{ID: "a3", Title: "Матан: ряды Фурье (YouTube)", Status: "failed", StatusLabel: "Ошибка", Visibility: "private", SourceKind: "video_url", CanRetry: true, ErrorText: "Не удалось скачать видео: требуется авторизация.", UpdatedAt: "1 Jul 2026"},
 		{ID: "slides", Title: "Фундаментальные основы разработки в эпоху ИИ", Status: "ready", StatusLabel: "Готово", Visibility: "private", SourceKind: "audio", CanPublish: true, UpdatedAt: "21 Jun 2026"},
@@ -175,6 +176,10 @@ func readerVM(dir, title, kind string, isOwner bool) (web.ReaderVM, error) {
 	if sourceTitle == "" {
 		sourceTitle = title
 	}
+	visibility := "public"
+	if isOwner {
+		visibility = "private"
+	}
 	vm := web.ReaderVM{
 		LectureID:   dir,
 		Title:       title,
@@ -182,6 +187,7 @@ func readerVM(dir, title, kind string, isOwner bool) (web.ReaderVM, error) {
 		SourceKind:  kind,
 		Duration:    int(structure.Source.Duration),
 		IsOwner:     isOwner,
+		Visibility:  visibility,
 	}
 
 	mediaIndex, slideIndex := 0, 0

@@ -13,7 +13,7 @@ type LectureCardVM struct {
 	Status string
 	// StatusLabel — локализованная метка статуса: «Обработка»/«Готово»/«Ошибка».
 	StatusLabel string
-	// Visibility — видимость: private|public.
+	// Visibility — видимость: private|unlisted|public.
 	Visibility string
 	// SourceKind — тип источника: audio|video|video_url.
 	SourceKind string
@@ -95,7 +95,7 @@ templ LectureCard(vm LectureCardVM) {
 		<div class="ll-lec-card-top">
 			<span class={ "ll-badge", sourceBadgeClass(vm.SourceKind) }>{ sourceLabel(vm.SourceKind) }</span>
 			<div class="ll-lec-card-actions">
-				if vm.Visibility == "public" {
+				if vm.Visibility == "public" || vm.Visibility == "unlisted" {
 					@LectureShareButton(vm)
 				}
 				if vm.CanRetry {
@@ -127,7 +127,7 @@ templ LectureCard(vm LectureCardVM) {
 		</div>
 		<div class="ll-lec-card-footer">
 			<span class="ll-lec-meta">{ vm.UpdatedAt }</span>
-			if vm.CanPublish || vm.Visibility == "public" {
+			if vm.CanPublish || (vm.Visibility != "" && vm.Visibility != "private") {
 				@LectureVisibilityToggle(vm)
 			}
 		</div>
@@ -187,27 +187,39 @@ templ LectureTitleInline(vm LectureCardVM) {
 	</form>
 }
 
-// LectureVisibilityToggle — тумблер переключения видимости лекции.
-// Для public-лекции disabled если статус не ready.
-// hx-vals обязателен: handleSetVisibility читает form-поле "visibility"
-// с целевым значением (без него публикация из UI не работает).
+// LectureVisibilityToggle — трёхпозиционный переключатель видимости лекции:
+// «Личная» (private) / «По ссылке» (unlisted) / «Витрина» (public).
+// Каждая неактивная кнопка шлёт hx-post с целевым значением и перерисовывает карточку;
+// уже выбранный сегмент заблокирован, чтобы повторный клик не вызывал лишний запрос.
+// Для неготовой лекции (processing/failed) доступен только возврат в «Личная».
 templ LectureVisibilityToggle(vm LectureCardVM) {
+	<div class="ll-toggle-group" role="group" aria-label="Видимость лекции">
+		@visibilitySegment(vm, "private", "Личная", "Личная лекция", "Личная лекция — доступна только вам", nil)
+		@visibilitySegment(vm, "unlisted", "По ссылке", "Лекция по ссылке", "Лекция по ссылке — открыта всем, кто знает URL, но скрыта с Витрины", nil)
+		@visibilitySegment(vm, "public", "Витрина", "Опубликовать на Витрине", "Публичная лекция — на Витрине, видна всем", publicConfirmAttrs(vm))
+	</div>
+}
+
+// visibilitySegment — одна кнопка трёхпозиционного переключателя видимости.
+templ visibilitySegment(vm LectureCardVM, target, label, titleText, ariaLabel string, extraAttrs templ.Attributes) {
 	<button
-		class={ "ll-toggle", visibilityToggleClass(vm) }
+		type="button"
+		class={ "ll-toggle", "ll-toggle--" + target, templ.KV("ll-toggle--active", vm.Visibility == target) }
 		hx-post={ "/lectures/" + vm.ID + "/visibility" }
-		hx-vals={ visibilityVals(vm) }
-		hx-confirm={ visibilityConfirm(vm) }
+		hx-vals={ visibilityVals(target) }
 		hx-target={ "#lec-" + vm.ID }
 		hx-swap="outerHTML"
-		disabled?={ !vm.CanPublish && vm.Visibility != "public" }
-		aria-label={ visibilityLabel(vm) }
-		title={ visibilityLabel(vm) }
+		disabled?={ vm.Visibility == target || (target != "private" && !vm.CanPublish) }
+		{ extraAttrs... }
+		aria-pressed={ pressedAttr(vm.Visibility == target) }
+		aria-label={ ariaLabel }
+		title={ titleText }
 	>
-		{ visibilityText(vm) }
+		{ label }
 	</button>
 }
 
-// LectureShareButton — копирование публичной ссылки на читалку.
+// LectureShareButton — копирование ссылки на читалку (для unlisted и public).
 // Абсолютный URL собирается в браузере (location.origin + путь),
 // подтверждение — сменой иконки на галочку (класс ll-share--done).
 templ LectureShareButton(vm LectureCardVM) {
@@ -336,45 +348,29 @@ func sourceLabel(sourceKind string) string {
 	}
 }
 
-// visibilityToggleClass возвращает CSS-класс тумблера в зависимости от видимости.
-func visibilityToggleClass(vm LectureCardVM) string {
-	if vm.Visibility == "public" {
-		return "ll-toggle--public"
-	}
-	return "ll-toggle--private"
+// visibilityVals — JSON для hx-vals с выбором видимости
+// (handleSetVisibility читает form-поле "visibility") — без него кнопки не работают.
+func visibilityVals(visibility string) string {
+	return fmt.Sprintf(`{"visibility":%q}`, visibility)
 }
 
-// visibilityLabel возвращает aria-label для тумблера видимости.
-func visibilityLabel(vm LectureCardVM) string {
-	if vm.Visibility == "public" {
-		return "Снять с публикации"
+// pressedAttr возвращает значение aria-pressed для кнопки-переключателя.
+func pressedAttr(active bool) string {
+	if active {
+		return "true"
 	}
-	return "Опубликовать"
+	return "false"
 }
 
-// visibilityText возвращает текстовую метку тумблера.
-func visibilityText(vm LectureCardVM) string {
+// publicConfirmAttrs — подтверждение только перед публикацией на общую Витрину.
+// Уже публичная лекция подтверждения не требует: кнопка лишь показывает состояние.
+func publicConfirmAttrs(vm LectureCardVM) templ.Attributes {
 	if vm.Visibility == "public" {
-		return "Публичная"
+		return nil
 	}
-	return "Личная"
-}
-
-// visibilityVals — JSON для hx-vals с целевым значением видимости
-// (противоположным текущему): его ждёт handleSetVisibility.
-func visibilityVals(vm LectureCardVM) string {
-	if vm.Visibility == "public" {
-		return `{"visibility":"private"}`
+	return templ.Attributes{
+		"hx-confirm": "Опубликовать лекцию на Витрине? Она станет видна всем посетителям и появится в общем каталоге.",
 	}
-	return `{"visibility":"public"}`
-}
-
-// visibilityConfirm — текст подтверждения переключения видимости.
-func visibilityConfirm(vm LectureCardVM) string {
-	if vm.Visibility == "public" {
-		return "Сделать лекцию личной? Она исчезнет из витрины, ссылка на чтение перестанет работать."
-	}
-	return "Опубликовать лекцию? Она появится в витрине, читать сможет любой по ссылке."
 }
 
 // iconShare — иконка «поделиться» (цепочка-ссылка).

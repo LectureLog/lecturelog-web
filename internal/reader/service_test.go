@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 	"testing"
 	"time"
 )
@@ -49,8 +50,10 @@ func TestServiceLoadAccess(t *testing.T) {
 
 	readyPrivate := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "private", CoreTaskID: "task"}
 	readyPublic := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "public", CoreTaskID: "task"}
+	readyUnlisted := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "unlisted", CoreTaskID: "task"}
 	processingPrivate := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "private", CoreTaskID: "task"}
 	processingPublic := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "public", CoreTaskID: "task"}
+	processingUnlisted := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "unlisted", CoreTaskID: "task"}
 
 	tests := []struct {
 		name    string
@@ -64,12 +67,18 @@ func TestServiceLoadAccess(t *testing.T) {
 		{name: "public ready owner", lecture: readyPublic, viewer: "owner"},
 		{name: "public ready other user", lecture: readyPublic, viewer: "other"},
 		{name: "public ready anonymous", lecture: readyPublic},
+		{name: "unlisted ready owner", lecture: readyUnlisted, viewer: "owner"},
+		{name: "unlisted ready other user", lecture: readyUnlisted, viewer: "other"},
+		{name: "unlisted ready anonymous", lecture: readyUnlisted},
 		{name: "private processing owner", lecture: processingPrivate, viewer: "owner", wantErr: ErrNotReady},
 		{name: "private processing other user", lecture: processingPrivate, viewer: "other", wantErr: ErrNotFound},
 		{name: "private processing anonymous", lecture: processingPrivate, wantErr: ErrNotFound},
 		{name: "public processing owner", lecture: processingPublic, viewer: "owner", wantErr: ErrNotReady},
 		{name: "public processing other user", lecture: processingPublic, viewer: "other", wantErr: ErrNotFound},
 		{name: "public processing anonymous", lecture: processingPublic, wantErr: ErrNotFound},
+		{name: "unlisted processing owner", lecture: processingUnlisted, viewer: "owner", wantErr: ErrNotReady},
+		{name: "unlisted processing other user", lecture: processingUnlisted, viewer: "other", wantErr: ErrNotFound},
+		{name: "unlisted processing anonymous", lecture: processingUnlisted, wantErr: ErrNotFound},
 		{name: "missing lecture", wantErr: ErrNotFound},
 	}
 
@@ -131,6 +140,29 @@ func TestServiceLoadBuildsView(t *testing.T) {
 	}
 }
 
+// TestServiceLoadPropagatesVisibility проверяет, что модель читалки несёт
+// текущую видимость лекции — по ней HTTP-слой выставляет noindex-заголовки.
+func TestServiceLoadPropagatesVisibility(t *testing.T) {
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "unlisted", CoreTaskID: "task-1"}},
+		&fakeObjectStore{data: validStructure(t)},
+		&fakePresigner{},
+		fakeRenderer{},
+		time.Hour,
+	)
+
+	view, err := service.Load(context.Background(), "lecture", "")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if view.Visibility != "unlisted" {
+		t.Errorf("ReaderView.Visibility = %q, want unlisted", view.Visibility)
+	}
+	if view.IsOwner {
+		t.Error("ReaderView.IsOwner = true для анонимного чтения unlisted-лекции")
+	}
+}
+
 func TestServiceLoadCoreUnavailable(t *testing.T) {
 	service := NewService(
 		fakeLectureRepo{lecture: &LectureMeta{OwnerID: "owner", Status: "ready", Visibility: "private", CoreTaskID: "task"}},
@@ -154,6 +186,85 @@ func TestServiceLoadInvalidStructure(t *testing.T) {
 	)
 	if _, err := service.Load(context.Background(), "lecture", "owner"); err == nil {
 		t.Fatal("Load() error = nil, want structure error")
+	}
+}
+
+func structureWith(sections ...Section) Structure {
+	return Structure{Source: Source{Kind: "video"}, Sections: sections}
+}
+
+func numberedSection(title string, subtopics ...Subtopic) Section {
+	return Section{Title: title, Subtopics: subtopics}
+}
+
+func slideSubtopic(keys []string, nums []int) Subtopic {
+	return Subtopic{Title: "Подтема", SlideKeys: keys, SlideNums: nums}
+}
+
+func TestBuildSlideMapNumbersSlides(t *testing.T) {
+	tests := []struct {
+		name        string
+		structure   Structure
+		wantNumbers [][][]int
+		wantKeys    map[int]string
+	}{
+		{
+			name:        "explicit slide nums",
+			structure:   structureWith(numberedSection("С", slideSubtopic([]string{"a", "b"}, []int{3, 4}))),
+			wantNumbers: [][][]int{{[]int{3, 4}}},
+			wantKeys:    map[int]string{3: "a", 4: "b"},
+		},
+		{
+			name: "legacy without slide nums",
+			structure: structureWith(
+				numberedSection("С1", slideSubtopic([]string{"a", "b"}, nil)),
+				numberedSection("С2", slideSubtopic([]string{"c"}, nil)),
+			),
+			wantNumbers: [][][]int{{[]int{1, 2}}, {[]int{3}}},
+			wantKeys:    map[int]string{1: "a", 2: "b", 3: "c"},
+		},
+		{
+			name: "mixed numbers continue after max",
+			structure: structureWith(
+				numberedSection("С1", slideSubtopic([]string{"a"}, []int{2})),
+				numberedSection("С2", slideSubtopic([]string{"b", "c"}, nil)),
+			),
+			wantNumbers: [][][]int{{[]int{2}}, {[]int{3, 4}}},
+			wantKeys:    map[int]string{2: "a", 3: "b", 4: "c"},
+		},
+		{
+			name:        "partially filled nums keep explicit and number the rest",
+			structure:   structureWith(numberedSection("С", slideSubtopic([]string{"a", "b", "c"}, []int{5, 0}))),
+			wantNumbers: [][][]int{{[]int{5, 6, 7}}},
+			wantKeys:    map[int]string{5: "a", 6: "b", 7: "c"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildSlideMap(tt.structure)
+			if len(got.Numbers) != len(tt.wantNumbers) {
+				t.Fatalf("Numbers = %#v, want %#v", got.Numbers, tt.wantNumbers)
+			}
+			for si := range tt.wantNumbers {
+				if len(got.Numbers[si]) != len(tt.wantNumbers[si]) {
+					t.Fatalf("Numbers[%d] = %#v, want %#v", si, got.Numbers[si], tt.wantNumbers[si])
+				}
+				for ti := range tt.wantNumbers[si] {
+					if !slices.Equal(got.Numbers[si][ti], tt.wantNumbers[si][ti]) {
+						t.Fatalf("Numbers[%d][%d] = %#v, want %#v", si, ti, got.Numbers[si][ti], tt.wantNumbers[si][ti])
+					}
+				}
+			}
+			if len(got.Keys) != len(tt.wantKeys) {
+				t.Fatalf("Keys = %#v, want %#v", got.Keys, tt.wantKeys)
+			}
+			for num, key := range tt.wantKeys {
+				if got.Keys[num] != key {
+					t.Fatalf("Keys[%d] = %q, want %q", num, got.Keys[num], key)
+				}
+			}
+		})
 	}
 }
 
@@ -241,5 +352,128 @@ func TestServiceLoadWithoutMarkersKeepsGallery(t *testing.T) {
 	}
 	if len(sub.SlideURLs) != 1 || sub.SlideURLs[0] != "https://storage.example/slide" {
 		t.Errorf("SlideURLs = %#v", sub.SlideURLs)
+	}
+}
+
+func TestServiceLoadSlide(t *testing.T) {
+	structure := []byte(`{
+	  "source": {"title": "Л", "kind": "video", "duration": 60},
+	  "sections": [{"title": "С", "subtopics": [{
+	    "title": "П",
+	    "slide_keys": ["results/t/slide-1.png", "results/t/slide-2.jpg"],
+	    "slide_nums": [1, 2],
+	    "content_md": "Текст"
+	  }]}]
+	}`)
+	store := &objectStore{objects: map[string][]byte{
+		"results/t/output/structure.json": structure,
+		"results/t/slide-1.png":           pngSlideBytes,
+		"results/t/slide-2.jpg":           jpegSlideBytes,
+	}}
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "unlisted", CoreTaskID: "t"}},
+		store, &fakePresigner{}, fakeRenderer{}, time.Hour,
+	)
+
+	slide, err := service.LoadSlide(context.Background(), "l", "", 2)
+	if err != nil {
+		t.Fatalf("LoadSlide() error = %v", err)
+	}
+	if string(slide.Bytes) != string(jpegSlideBytes) {
+		t.Errorf("Bytes = %q, want %q", slide.Bytes, jpegSlideBytes)
+	}
+	if slide.ContentType != "image/jpeg" {
+		t.Errorf("ContentType = %q, want image/jpeg", slide.ContentType)
+	}
+	if slide.Visibility != "unlisted" {
+		t.Errorf("Visibility = %q, want unlisted", slide.Visibility)
+	}
+	if len(store.calls) != 2 || store.calls[0] != "results/t/output/structure.json" || store.calls[1] != "results/t/slide-2.jpg" {
+		t.Errorf("GetObject calls = %v", store.calls)
+	}
+}
+
+func TestServiceLoadSlideContentTypes(t *testing.T) {
+	tests := []struct {
+		key  string
+		data []byte
+		want string
+	}{
+		{key: "results/t/a.PNG", data: []byte("x"), want: "image/png"},
+		{key: "results/t/a.jpeg", data: []byte("x"), want: "image/jpeg"},
+		{key: "results/t/a.webp", data: []byte("x"), want: "image/webp"},
+		{key: "results/t/frame", data: pngSlideBytes, want: "image/png"},
+		{key: "results/t/frame", data: []byte("не картинка"), want: "text/plain; charset=utf-8"},
+	}
+
+	for _, tt := range tests {
+		store := &objectStore{objects: map[string][]byte{
+			"results/t/output/structure.json": []byte(`{
+			  "source": {"title": "Л", "kind": "video", "duration": 60},
+			  "sections": [{"title": "С", "subtopics": [{"title": "П", "slide_keys": ["` + tt.key + `"], "slide_nums": [1], "content_md": "Текст"}]}]
+			}`),
+			tt.key: tt.data,
+		}}
+		service := NewService(
+			fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "public", CoreTaskID: "t"}},
+			store, &fakePresigner{}, fakeRenderer{}, time.Hour,
+		)
+		slide, err := service.LoadSlide(context.Background(), "l", "", 1)
+		if err != nil {
+			t.Fatalf("LoadSlide(%q) error = %v", tt.key, err)
+		}
+		if slide.ContentType != tt.want {
+			t.Errorf("LoadSlide(%q) ContentType = %q, want %q", tt.key, slide.ContentType, tt.want)
+		}
+	}
+}
+
+func TestServiceLoadSlideUnknownNumber(t *testing.T) {
+	store := &objectStore{objects: map[string][]byte{
+		"results/t/output/structure.json": []byte(`{
+		  "source": {"title": "Л", "kind": "video", "duration": 60},
+		  "sections": [{"title": "С", "subtopics": [{"title": "П", "slide_keys": ["results/t/a.png"], "slide_nums": [4], "content_md": "Текст"}]}]
+		}`),
+	}}
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "private", CoreTaskID: "t"}},
+		store, &fakePresigner{}, fakeRenderer{}, time.Hour,
+	)
+
+	if _, err := service.LoadSlide(context.Background(), "l", "o", 1); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("LoadSlide() error = %v, want ErrNotFound", err)
+	}
+	if len(store.calls) != 1 {
+		t.Fatalf("GetObject calls = %v, want только structure.json", store.calls)
+	}
+}
+
+func TestServiceLoadSlideAccessDenied(t *testing.T) {
+	store := &objectStore{}
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "private", CoreTaskID: "t"}},
+		store, &fakePresigner{}, fakeRenderer{}, time.Hour,
+	)
+
+	for _, viewer := range []string{"", "other"} {
+		for _, n := range []int{0, 1} {
+			if _, err := service.LoadSlide(context.Background(), "l", viewer, n); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("LoadSlide(viewer=%q, %d) error = %v, want ErrNotFound", viewer, n, err)
+			}
+		}
+	}
+	if len(store.calls) != 0 {
+		t.Fatalf("GetObject calls = %v, want пусто", store.calls)
+	}
+}
+
+func TestServiceLoadSlideCoreUnavailable(t *testing.T) {
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "l", OwnerID: "o", Status: "ready", Visibility: "public", CoreTaskID: "t"}},
+		&objectStore{errs: map[string]error{"results/t/output/structure.json": errors.New("хранилище недоступно")}},
+		&fakePresigner{}, fakeRenderer{}, time.Hour,
+	)
+	if _, err := service.LoadSlide(context.Background(), "l", "", 1); !errors.Is(err, ErrCoreUnavailable) {
+		t.Fatalf("LoadSlide() error = %v, want ErrCoreUnavailable", err)
 	}
 }

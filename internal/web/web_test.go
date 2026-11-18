@@ -214,28 +214,176 @@ func TestLayout_HtmxHeaders(t *testing.T) {
 }
 
 // TestVisibilityToggle_SendsTargetValue фиксирует контракт с handleSetVisibility:
-// тумблер обязан слать form-поле visibility с целевым (противоположным) значением —
-// без hx-vals публикация из UI молча не работает.
+// каждая кнопка трёхпозиционного переключателя обязана слать form-поле visibility
+// со своим значением — без hx-vals переключение из UI молча не работает.
 func TestVisibilityToggle_SendsTargetValue(t *testing.T) {
-	render := func(vm web.LectureCardVM) string {
-		var b bytes.Buffer
-		if err := web.LectureCard(vm).Render(context.Background(), &b); err != nil {
-			t.Fatalf("LectureCard.Render: %v", err)
+	privateHTML, privateButtons := parseCardVisibility(t, web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true})
+	if len(privateButtons) != 3 {
+		t.Fatalf("кнопок переключателя = %d, ожидается 3", len(privateButtons))
+	}
+	for _, visibility := range []string{"private", "unlisted", "public"} {
+		want := `{"visibility":"` + visibility + `"}`
+		if got := attrVal(privateButtons[visibility], "hx-vals"); got != want {
+			t.Errorf("кнопка %s: hx-vals = %q, ожидается %q", visibility, got, want)
 		}
-		return b.String()
+	}
+	for _, want := range []string{"Личная", "По ссылке", "Витрина"} {
+		if !strings.Contains(privateHTML, want) {
+			t.Errorf("личная лекция: в карточке нет метки %q", want)
+		}
+	}
+	if strings.Contains(privateHTML, "ll-share") {
+		t.Error("личная карточка не должна содержать кнопку «Скопировать ссылку»")
+	}
+	if !strings.Contains(privateHTML, "Опубликовать лекцию на Витрине?") {
+		t.Error("переход в «Витрина» должен требовать подтверждения")
 	}
 
-	private := render(web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true})
-	if !strings.Contains(private, `{&#34;visibility&#34;:&#34;public&#34;}`) && !strings.Contains(private, `{"visibility":"public"}`) {
-		t.Errorf("личная лекция: hx-vals должен слать visibility=public, получено:\n%s", private)
+	unlistedHTML, _ := parseCardVisibility(t, web.LectureCardVM{ID: "x", Status: "ready", Visibility: "unlisted", CanPublish: true})
+	if !strings.Contains(unlistedHTML, "ll-share") {
+		t.Error("unlisted-карточка должна содержать кнопку «Скопировать ссылку»")
 	}
 
-	public := render(web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true})
-	if !strings.Contains(public, `{&#34;visibility&#34;:&#34;private&#34;}`) && !strings.Contains(public, `{"visibility":"private"}`) {
-		t.Errorf("публичная лекция: hx-vals должен слать visibility=private, получено:\n%s", public)
-	}
-	if !strings.Contains(public, "ll-share") {
+	publicHTML, publicButtons := parseCardVisibility(t, web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true})
+	if !strings.Contains(publicHTML, "ll-share") {
 		t.Error("публичная карточка должна содержать кнопку «Скопировать ссылку»")
+	}
+	if strings.Contains(publicHTML, "Опубликовать лекцию на Витрине?") {
+		t.Error("уже публичная лекция не должна запрашивать подтверждение публикации")
+	}
+	if got := attrVal(publicButtons["public"], "aria-pressed"); got != "true" {
+		t.Errorf("публичная карточка: aria-pressed = %q, ожидается true", got)
+	}
+}
+
+// TestVisibilityToggle_ThreeState проверяет семантику 3-позиционного переключателя:
+// активная кнопка помечена aria-pressed="true" и классом состояния, а для неготовой
+// лекции открытие по ссылке и публикация заблокированы.
+func TestVisibilityToggle_ThreeState(t *testing.T) {
+	tests := []struct {
+		name       string
+		vm         web.LectureCardVM
+		active     string
+		disabledOn []string
+	}{
+		{
+			name:       "личная",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "private", CanPublish: true},
+			active:     "private",
+			disabledOn: []string{"private"},
+		},
+		{
+			name:       "по ссылке",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "unlisted", CanPublish: true},
+			active:     "unlisted",
+			disabledOn: []string{"unlisted"},
+		},
+		{
+			name:       "витрина",
+			vm:         web.LectureCardVM{ID: "x", Status: "ready", Visibility: "public", CanPublish: true},
+			active:     "public",
+			disabledOn: []string{"public"},
+		},
+		{
+			name:       "неготовая лекция",
+			vm:         web.LectureCardVM{ID: "x", Status: "processing", Visibility: "public", CanPublish: false},
+			active:     "public",
+			disabledOn: []string{"unlisted", "public"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, buttons := parseCardVisibility(t, tt.vm)
+			if len(buttons) != 3 {
+				t.Fatalf("кнопок переключателя = %d, ожидается 3", len(buttons))
+			}
+			disabledSet := make(map[string]bool, len(tt.disabledOn))
+			for _, v := range tt.disabledOn {
+				disabledSet[v] = true
+			}
+			for visibility, button := range buttons {
+				wantPressed := "false"
+				if visibility == tt.active {
+					wantPressed = "true"
+				}
+				if got := attrVal(button, "aria-pressed"); got != wantPressed {
+					t.Errorf("%s: aria-pressed = %q, ожидается %q", visibility, got, wantPressed)
+				}
+				if visibility == tt.active && !strings.Contains(attrVal(button, "class"), "ll-toggle--"+visibility) {
+					t.Errorf("активная кнопка %s без класса ll-toggle--%s: %q", visibility, visibility, attrVal(button, "class"))
+				}
+				if hasAttr(button, "disabled") != disabledSet[visibility] {
+					t.Errorf("%s: disabled = %v, ожидается %v", visibility, hasAttr(button, "disabled"), disabledSet[visibility])
+				}
+			}
+		})
+	}
+}
+
+// parseCardVisibility рендерит карточку и возвращает её HTML и кнопки переключателя.
+func parseCardVisibility(t *testing.T, vm web.LectureCardVM) (string, map[string]*html.Node) {
+	t.Helper()
+	var b bytes.Buffer
+	if err := web.LectureCard(vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("LectureCard.Render: %v", err)
+	}
+	doc, err := html.Parse(strings.NewReader(b.String()))
+	if err != nil {
+		t.Fatalf("html.Parse: %v", err)
+	}
+	return b.String(), visibilityButtons(doc)
+}
+
+// visibilityButtons собирает кнопки переключателя видимости по значению hx-vals.
+func visibilityButtons(doc *html.Node) map[string]*html.Node {
+	result := make(map[string]*html.Node, 3)
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.DataAtom == atom.Button {
+			vals := attrVal(n, "hx-vals")
+			for _, visibility := range []string{"private", "unlisted", "public"} {
+				if strings.Contains(vals, `"`+visibility+`"`) {
+					result[visibility] = n
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	return result
+}
+
+// TestLectureCard_NonReadyPrivateHidesToggle проверяет, что у неготовой личной
+// лекции переключателя видимости нет (как и раньше): открывать нечего.
+func TestLectureCard_NonReadyPrivateHidesToggle(t *testing.T) {
+	html := renderLectureCard(t, web.LectureCardVM{
+		ID:          "lec-1",
+		Title:       "Лекция",
+		Status:      "processing",
+		StatusLabel: "Обработка",
+		Visibility:  "private",
+		SourceKind:  "audio",
+		UpdatedAt:   "24 июн. 2026",
+	})
+	if strings.Contains(html, "ll-toggle") {
+		t.Errorf("неготовая приватная карточка не должна показывать переключатель: %s", html)
+	}
+}
+
+// TestLayout_NoIndex проверяет, что флаг NoIndex добавляет meta robots в <head>,
+// а без флага метатег не появляется.
+func TestLayout_NoIndex(t *testing.T) {
+	indexable := renderLayoutWithData(t, web.LayoutData{Title: "Витрина"})
+	if strings.Contains(indexable, `name="robots"`) {
+		t.Error("индексируемая страница не должна содержать meta robots")
+	}
+
+	noIndex := renderLayoutWithData(t, web.LayoutData{Title: "Лекция по ссылке", NoIndex: true})
+	if !strings.Contains(noIndex, `<meta name="robots" content="noindex, nofollow">`) {
+		t.Error("NoIndex должен добавлять meta robots noindex, nofollow в <head>")
 	}
 }
 

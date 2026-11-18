@@ -24,6 +24,12 @@ type LayoutData struct {
 	// Active — ключ активного пункта навигации: hub|lectures|upload|"" (см. navLink).
 	// Страницы выставляют его сами через withNav — обработчикам знать не нужно.
 	Active string
+	// NoIndex — запрет индексации страницы поисковиками
+	// (не-публичные лекции: unlisted и private, открытая владельцу).
+	NoIndex bool
+	// AlternateMarkdownURL — адрес Агентского представления страницы для
+	// <link rel="alternate" type="text/markdown">. Пусто — ссылка не выводится.
+	AlternateMarkdownURL string
 }
 
 // NewLayoutData собирает данные layout из контекста запроса.
@@ -73,6 +79,12 @@ templ Layout(data LayoutData, actions templ.Component) {
 			<meta charset="utf-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1"/>
 			<meta name="description" content="LectureLog — конспекты лекций с тайм-кодами: загрузите запись, получите структурированный конспект со слайдами."/>
+			if data.NoIndex {
+				<meta name="robots" content="noindex, nofollow"/>
+			}
+			if data.AlternateMarkdownURL != "" {
+				<link rel="alternate" type="text/markdown" href={ data.AlternateMarkdownURL }/>
+			}
 			<!-- Инлайн-скрипт темы: читает localStorage до first paint, устраняет FOUC -->
 			<script>
 				(function(){
