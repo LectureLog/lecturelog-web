@@ -3,6 +3,7 @@ package reader
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -105,6 +106,7 @@ func writeAgentSubtopic(b *strings.Builder, origin, lectureID string, subtopic S
 		)
 	}
 
+	subtopicSlideNums := slideMap.Numbers[sectionIndex][subtopicIndex]
 	placed := make(map[int]bool)
 	rest := subtopic.ContentMD
 	for {
@@ -114,7 +116,7 @@ func writeAgentSubtopic(b *strings.Builder, origin, lectureID string, subtopic S
 		}
 		writeAgentText(b, rest[:loc[0]])
 		if num, err := strconv.Atoi(rest[loc[2]:loc[3]]); err == nil {
-			if _, ok := slideMap.Keys[num]; ok {
+			if slices.Contains(subtopicSlideNums, num) && !placed[num] {
 				writeAgentSlide(b, origin, lectureID, num, subtopic.Title)
 				placed[num] = true
 			}
@@ -123,7 +125,7 @@ func writeAgentSubtopic(b *strings.Builder, origin, lectureID string, subtopic S
 	}
 	writeAgentText(b, rest)
 
-	for _, num := range slideMap.Numbers[sectionIndex][subtopicIndex] {
+	for _, num := range subtopicSlideNums {
 		if placed[num] {
 			continue
 		}
@@ -164,6 +166,9 @@ func agentCalloutMarkdown(meta calloutMeta, body string) string {
 		fmt.Fprintf(&b, "> **%s: %s**", title, meta.title)
 	} else {
 		fmt.Fprintf(&b, "> **%s**", title)
+	}
+	if body == "" {
+		return b.String()
 	}
 	for _, line := range strings.Split(body, "\n") {
 		if strings.TrimSpace(line) == "" {

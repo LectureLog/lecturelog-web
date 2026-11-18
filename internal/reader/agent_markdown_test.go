@@ -603,10 +603,20 @@ func TestAgentMarkdownOriginFallback(t *testing.T) {
 func TestAgentMarkdownCalloutWithoutTitle(t *testing.T) {
 	const structure = `{
 		"source":{"title":"Источник","kind":"audio","duration":"00:10"},
-		"sections":[{"title":"Раздел","subtopics":[{
-			"title":"Подтема",
-			"content_md":"Текст\n\n> [!note]\n> Тело заметки\n\n> [!warning]+ Важно\n> Осторожно"
-		}]}]
+		"sections":[{"title":"Раздел","subtopics":[
+			{
+				"title":"Подтема",
+				"slide_keys":["results/task/s1.png"],
+				"slide_nums":[1],
+				"content_md":"Текст\n\n<!-- slide:2 -->\n\n> [!note]\n> Тело заметки\n\n> [!warning]+ Важно\n> Осторожно\n\n> [!quote] Только заголовок"
+			},
+			{
+				"title":"Вторая подтема",
+				"slide_keys":["results/task/s2.png"],
+				"slide_nums":[2],
+				"content_md":"Второй текст"
+			}
+		]}]
 	}`
 	handler, _ := newAgentHandler(t, agentLecture(), "", structure)
 	body := agentGet(handler, "/read/lecture.md", "", nil).Body.String()
@@ -616,10 +626,18 @@ func TestAgentMarkdownCalloutWithoutTitle(t *testing.T) {
 		"> Тело заметки",
 		"> **Внимание: Важно**",
 		"> Осторожно",
+		"> **Цитата: Только заголовок**\n\n",
+		"![Слайд 2: Вторая подтема]",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("в Агентском представлении отсутствует %q\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "![Слайд 2: Подтема]") {
+		t.Errorf("чужой инлайн-маркер слайда не должен вставляться в первую подтему:\n%s", body)
+	}
+	if strings.Contains(body, "> **Цитата: Только заголовок**\n>") {
+		t.Errorf("callout без тела не должен порождать пустую строку цитаты:\n%s", body)
 	}
 	if strings.Contains(body, "<details") || strings.Contains(body, "<svg") {
 		t.Errorf("callout не должен рендериться HTML-обвязкой:\n%s", body)

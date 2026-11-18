@@ -58,8 +58,9 @@ func (h *Handlers) Mount(r chi.Router) {
 
 func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 	lectureID := chi.URLParam(r, "id")
-	// Ответ зависит от Accept и User-Agent — обязательно сообщаем об этом кешам.
-	w.Header().Set("Vary", "Accept, User-Agent")
+	// Ответ зависит от Accept и User-Agent — сообщаем об этом кешам,
+	// сохраняя уже выставленные Vary (например, Cookie от CSRF-middleware).
+	setVaryAcceptUserAgent(w)
 
 	// chi разбирает `{id}.md` как параметр `{id}` и статический суффикс, но
 	// страховка на случай иного порядка матчинга: `.md` всегда Markdown.
@@ -79,17 +80,11 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Не-публичная лекция (unlisted или private для владельца) не должна
-	// попадать в поисковые индексы и кеши общих прокси.
-	if view.Visibility != "public" {
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		w.Header().Set("Cache-Control", "private, no-store")
-	}
+	setNonPublicHeaders(w, view.Visibility)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := web.NewLayoutData(r.Context(), view.Title)
 	data.NoIndex = view.Visibility != "public"
-	data.AlternateMarkdownURL = "/read/" + view.LectureID + ".md"
 	if err := web.ReaderPage(data, readerToVM(view)).Render(r.Context(), w); err != nil {
 		log.Printf("reader: render: %v", err)
 	}
@@ -107,10 +102,7 @@ func (h *Handlers) serveReadMarkdown(w http.ResponseWriter, r *http.Request, lec
 	origin := web.ResolveOrigin(h.baseOrigin, r)
 	doc, err := h.svc.LoadMarkdown(r.Context(), lectureID, viewerID(r.Context()), origin)
 
-	if doc.Visibility != "" && doc.Visibility != "public" {
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-		w.Header().Set("Cache-Control", "private, no-store")
-	}
+	setNonPublicHeaders(w, doc.Visibility)
 	if err != nil {
 		status, message := resolveLoadError(err, "Лекция не найдена", "markdown")
 		writeTextMessage(w, status, message)
@@ -132,10 +124,7 @@ func (h *Handlers) handleSlide(w http.ResponseWriter, r *http.Request) {
 	}
 
 	slide, err := h.svc.LoadSlide(r.Context(), chi.URLParam(r, "id"), viewerID(r.Context()), num)
-	if slide.Visibility != "" && slide.Visibility != "public" {
-		w.Header().Set("Cache-Control", "private, no-store")
-		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
-	}
+	setNonPublicHeaders(w, slide.Visibility)
 	if err != nil {
 		h.writeSlideError(w, err)
 		return
@@ -146,6 +135,28 @@ func (h *Handlers) handleSlide(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "public, max-age=3600")
 	}
 	_, _ = w.Write(slide.Bytes)
+}
+
+// setNonPublicHeaders выставляет запрет индексации и кеширования для
+// не-публичных Лекций (unlisted и private).
+func setNonPublicHeaders(w http.ResponseWriter, visibility string) {
+	if visibility != "" && visibility != "public" {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
+}
+
+// setVaryAcceptUserAgent добавляет Accept и User-Agent в заголовок Vary,
+// сохраняя существующие значения (например, Cookie от глобального middleware).
+func setVaryAcceptUserAgent(w http.ResponseWriter) {
+	existing := strings.Join(w.Header().Values("Vary"), ", ")
+	if existing == "" {
+		w.Header().Set("Vary", "Accept, User-Agent")
+		return
+	}
+	if !strings.Contains(existing, "Accept, User-Agent") {
+		w.Header().Set("Vary", "Accept, User-Agent, "+existing)
+	}
 }
 
 func (h *Handlers) handleExport(w http.ResponseWriter, r *http.Request) {
