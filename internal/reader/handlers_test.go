@@ -119,6 +119,71 @@ func TestHandlersReadPublicReadyAnonymous(t *testing.T) {
 	if !strings.Contains(rec.Body.String(), "Подтема") {
 		t.Fatalf("страница не содержит раздел: %s", rec.Body.String())
 	}
+	// Публичная лекция индексируется и не запрещает кеширование.
+	if got := rec.Header().Get("X-Robots-Tag"); got != "" {
+		t.Errorf("X-Robots-Tag публичной лекции = %q, want пусто", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "" {
+		t.Errorf("Cache-Control публичной лекции = %q, want пусто", got)
+	}
+	if strings.Contains(rec.Body.String(), `name="robots"`) {
+		t.Error("публичная лекция не должна содержать meta robots")
+	}
+}
+
+// TestHandlersReadUnlistedAnonymous проверяет чтение unlisted-лекции анонимом:
+// 200, доступ по прямой ссылке и запрет индексации/кеширования.
+func TestHandlersReadUnlistedAnonymous(t *testing.T) {
+	rec := requestReader(newReaderHandler(t, readerLecture("ready", "unlisted"), nil, nil), "/read/lecture", false)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET unlisted /read/lecture = %d, want 200: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "Подтема") {
+		t.Fatalf("страница не содержит раздел: %s", rec.Body.String())
+	}
+	assertNoIndexHeaders(t, rec)
+}
+
+// TestHandlersReadUnlistedProcessingHidden проверяет, что неготовая unlisted-лекция
+// не открывается анониму и отдаёт 202 владельцу.
+func TestHandlersReadUnlistedProcessingHidden(t *testing.T) {
+	handler := newReaderHandler(t, readerLecture("processing", "unlisted"), nil, nil)
+
+	anonymous := requestReader(handler, "/read/lecture", false)
+	if anonymous.Code != http.StatusNotFound {
+		t.Fatalf("GET unlisted processing анонимом = %d, want 404", anonymous.Code)
+	}
+	assertSoftError(t, anonymous.Body.String())
+
+	owner := requestReader(handler, "/read/lecture", true)
+	if owner.Code != http.StatusAccepted {
+		t.Fatalf("GET unlisted processing владельцем = %d, want 202", owner.Code)
+	}
+	assertSoftError(t, owner.Body.String())
+}
+
+// TestHandlersReadPrivateOwnerNoIndex проверяет, что владелец читает свою
+// личную лекцию, но страница закрыта от индексации и кеша.
+func TestHandlersReadPrivateOwnerNoIndex(t *testing.T) {
+	rec := requestReader(newReaderHandler(t, readerLecture("ready", "private"), nil, nil), "/read/lecture", true)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("GET private /read/lecture владельцем = %d, want 200", rec.Code)
+	}
+	assertNoIndexHeaders(t, rec)
+}
+
+// assertNoIndexHeaders проверяет пару заголовков запрета индексации и метатег в <head>.
+func assertNoIndexHeaders(t *testing.T, rec *httptest.ResponseRecorder) {
+	t.Helper()
+	if got := rec.Header().Get("X-Robots-Tag"); got != "noindex, nofollow" {
+		t.Errorf("X-Robots-Tag = %q, want noindex, nofollow", got)
+	}
+	if got := rec.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Errorf("Cache-Control = %q, want private, no-store", got)
+	}
+	if !strings.Contains(rec.Body.String(), `<meta name="robots" content="noindex, nofollow">`) {
+		t.Error("в <head> ожидается meta robots noindex, nofollow")
+	}
 }
 
 func TestHandlersReadNotFound(t *testing.T) {
@@ -166,6 +231,12 @@ func TestHandlersExport(t *testing.T) {
 			t.Fatalf("GET unavailable export = %d, want 502", rec.Code)
 		}
 		assertSoftError(t, rec.Body.String())
+	})
+	t.Run("unlisted anonymous redirects to signed archive", func(t *testing.T) {
+		rec := requestReader(newReaderHandler(t, readerLecture("ready", "unlisted"), nil, handlerExport{url: "https://signed"}), "/read/lecture/export", false)
+		if rec.Code != http.StatusFound || rec.Header().Get("Location") != "https://signed" {
+			t.Fatalf("GET unlisted /read/lecture/export = %d Location=%q, want 302", rec.Code, rec.Header().Get("Location"))
+		}
 	})
 	t.Run("private anonymous is hidden before provider", func(t *testing.T) {
 		export := &forbiddenExport{t: t}

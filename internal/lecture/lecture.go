@@ -24,8 +24,9 @@ const (
 type Visibility string
 
 const (
-	VisibilityPrivate Visibility = "private"
-	VisibilityPublic  Visibility = "public"
+	VisibilityPrivate  Visibility = "private"
+	VisibilityUnlisted Visibility = "unlisted"
+	VisibilityPublic   Visibility = "public"
 )
 
 // Lecture — доменная лекция пользователя.
@@ -54,7 +55,7 @@ type Repository interface {
 	FindByID(ctx context.Context, lectureID string) (*Lecture, error)
 	// Rename обновляет заголовок; фильтр по owner_id. Возвращает affected.
 	Rename(ctx context.Context, lectureID, ownerID, title string) (int64, error)
-	// SetVisibility меняет видимость; для public — только если status=ready. Возвращает affected.
+	// SetVisibility меняет видимость; для public и unlisted — только если status=ready. Возвращает affected.
 	SetVisibility(ctx context.Context, lectureID, ownerID, visibility string) (int64, error)
 	// Delete удаляет лекцию; фильтр по owner_id. Возвращает affected.
 	Delete(ctx context.Context, lectureID, ownerID string) (int64, error)
@@ -93,6 +94,8 @@ var (
 	ErrNotFailed = errors.New("lecture: retry доступен только для failed")
 	// ErrNoRetrySource — нет источника для повторной обработки.
 	ErrNoRetrySource = errors.New("lecture: нет источника для повтора")
+	// ErrInvalidVisibility — неизвестное значение видимости (валидация на границе запроса).
+	ErrInvalidVisibility = errors.New("lecture: недопустимое значение видимости")
 )
 
 // Service — доменный сервис лекций. Содержит бизнес-логику управления лекциями.

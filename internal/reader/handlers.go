@@ -43,8 +43,16 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Не-публичная лекция (unlisted или private для владельца) не должна
+	// попадать в поисковые индексы и кеши общих прокси.
+	if view.Visibility != "public" {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
+
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := web.NewLayoutData(r.Context(), view.Title)
+	data.NoIndex = view.Visibility != "public"
 	if err := web.ReaderPage(data, readerToVM(view)).Render(r.Context(), w); err != nil {
 		log.Printf("reader: render: %v", err)
 	}
@@ -103,7 +111,7 @@ func viewerID(ctx context.Context) string {
 }
 
 func readerToVM(view ReaderView) web.ReaderVM {
-	vm := web.ReaderVM{LectureID: view.LectureID, Title: view.Title, SourceTitle: view.SourceTitle, SourceKind: view.SourceKind, Duration: view.Duration, IsOwner: view.IsOwner, Sections: make([]web.ReaderSectionVM, 0, len(view.Sections))}
+	vm := web.ReaderVM{LectureID: view.LectureID, Title: view.Title, SourceTitle: view.SourceTitle, SourceKind: view.SourceKind, Duration: view.Duration, IsOwner: view.IsOwner, Visibility: view.Visibility, Sections: make([]web.ReaderSectionVM, 0, len(view.Sections))}
 	for _, section := range view.Sections {
 		sectionVM := web.ReaderSectionVM{Number: section.Number, Title: section.Title, Subtopics: make([]web.ReaderSubtopicVM, 0, len(section.Subtopics))}
 		for _, subtopic := range section.Subtopics {

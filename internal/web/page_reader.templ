@@ -13,6 +13,8 @@ type ReaderVM struct {
 	SourceKind  string
 	Duration    int
 	IsOwner     bool
+	// Visibility — видимость лекции: private|unlisted|public.
+	Visibility  string
 	Sections    []ReaderSectionVM
 }
 
@@ -76,6 +78,7 @@ templ ReaderPage(data LayoutData, vm ReaderVM) {
 						<span>{ readerDurationLabel(vm.Duration) }</span>
 						if vm.IsOwner {
 							<span class="ll-reader-owner">Владелец</span>
+							<span class={ "ll-reader-visibility", "ll-reader-visibility--" + vm.Visibility }>{ readerVisibilityLabel(vm.Visibility) }</span>
 						}
 					</div>
 					<div class="ll-reader-reading"><span>Прочитано</span><strong id="readerReadPercent">0%</strong><div><i id="readerReadBar"></i></div></div>
@@ -250,4 +253,19 @@ func readerSourceLabel(kind string) string {
 		return "Аудио"
 	}
 	return "Видео"
+}
+
+// readerVisibilityLabel возвращает локализованную метку видимости лекции
+// для бейджа в карточке источника (виден только владельцу).
+func readerVisibilityLabel(visibility string) string {
+	switch visibility {
+	case "private":
+		return "Личная"
+	case "unlisted":
+		return "По ссылке"
+	case "public":
+		return "Публичная"
+	default:
+		return ""
+	}
 }

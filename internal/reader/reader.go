@@ -55,6 +55,9 @@ type ReaderView struct {
 	Duration    int
 	Sections    []ViewSection
 	IsOwner     bool
+	// Visibility — уровень видимости лекции: private|unlisted|public.
+	// HTTP-слой по нему решает, закрывать ли страницу от индексации.
+	Visibility string
 }
 
 // ViewSection — раздел читального зала.

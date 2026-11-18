@@ -42,6 +42,7 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 		Duration:    int(structure.Source.Duration),
 		Sections:    make([]ViewSection, 0, len(structure.Sections)),
 		IsOwner:     isOwner,
+		Visibility:  lecture.Visibility,
 	}
 	for sectionIndex, section := range structure.Sections {
 		viewSection := ViewSection{
@@ -72,6 +73,10 @@ func (s *Service) AccessTaskID(ctx context.Context, lectureID, viewerID string) 
 }
 
 // accessLecture централизует проверку доступа для чтения и экспорта.
+// Готовая лекция открыта владельцу при любой видимости, а всем остальным
+// (включая анонимов) — при unlisted и public. Личная лекция (private) для
+// не-владельца неотличима от несуществующей: возврат в private мгновенно
+// закрывает внешний доступ к /read/{id} и /read/{id}/export.
 func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string) (*LectureMeta, bool, error) {
 	lecture, err := s.repo.FindByID(ctx, lectureID)
 	if err != nil {
@@ -88,6 +93,8 @@ func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string)
 		}
 		return nil, false, ErrNotFound
 	}
+	// Личная лекция скрыта от всех, кроме владельца; unlisted и public
+	// открыты по прямой ссылке одинаково.
 	if lecture.Visibility == "private" && !isOwner {
 		return nil, false, ErrNotFound
 	}

@@ -241,6 +241,118 @@ func TestHandlers_SetVisibility_OK(t *testing.T) {
 	}
 }
 
+// TestHandlers_SetVisibility_Unlisted проверяет POST visibility=unlisted → 200 и карточку
+// с активной кнопкой «По ссылке».
+func TestHandlers_SetVisibility_Unlisted(t *testing.T) {
+	lec := testLecture()
+	var gotVisibility string
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, visibility string) (int64, error) {
+			gotVisibility = visibility
+			return 1, nil
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			updated := lec
+			updated.Visibility = lecture.VisibilityUnlisted
+			return &updated, nil
+		},
+	}
+	svc := newTestService(repo, &mockCore{})
+	handler := mountTestRouter(svc)
+
+	form := url.Values{"visibility": {"unlisted"}}
+	req := addSessionCookie(httptest.NewRequest(http.MethodPost, "/lectures/"+lec.ID+"/visibility",
+		strings.NewReader(form.Encode())))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("POST visibility=unlisted = %d, ожидается 200", rec.Code)
+	}
+	if gotVisibility != "unlisted" {
+		t.Errorf("в репозиторий ушло %q, ожидается unlisted", gotVisibility)
+	}
+	if !strings.Contains(rec.Body.String(), "По ссылке") {
+		t.Error("карточка unlisted-лекции должна содержать кнопку «По ссылке»")
+	}
+}
+
+// TestHandlers_SetVisibility_NotReady проверяет 409 при открытии неготовой лекции.
+func TestHandlers_SetVisibility_NotReady(t *testing.T) {
+	lec := testLecture()
+	lec.Status = lecture.StatusProcessing
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &lec, nil
+		},
+	}
+	svc := newTestService(repo, &mockCore{})
+	handler := mountTestRouter(svc)
+
+	for _, visibility := range []string{"unlisted", "public"} {
+		form := url.Values{"visibility": {visibility}}
+		req := addSessionCookie(httptest.NewRequest(http.MethodPost, "/lectures/"+lec.ID+"/visibility",
+			strings.NewReader(form.Encode())))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		if rec.Code != http.StatusConflict {
+			t.Errorf("POST visibility=%s для processing = %d, ожидается 409", visibility, rec.Code)
+		}
+	}
+}
+
+// TestHandlers_SetVisibility_Invalid проверяет 400 на неизвестное значение видимости.
+func TestHandlers_SetVisibility_Invalid(t *testing.T) {
+	svc := newTestService(&mockRepo{}, &mockCore{})
+	handler := mountTestRouter(svc)
+
+	form := url.Values{"visibility": {"shared"}}
+	req := addSessionCookie(httptest.NewRequest(http.MethodPost, "/lectures/lec-1/visibility",
+		strings.NewReader(form.Encode())))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("POST visibility=shared = %d, ожидается 400", rec.Code)
+	}
+}
+
+// TestHandlers_SetVisibility_NotFound проверяет 404 на чужую лекцию:
+// существование чужой лекции не раскрывается.
+func TestHandlers_SetVisibility_NotFound(t *testing.T) {
+	foreign := testLecture()
+	foreign.OwnerID = "other-user"
+	foreign.Visibility = lecture.VisibilityPublic
+	repo := &mockRepo{
+		setVisibility: func(_ context.Context, _, _, _ string) (int64, error) {
+			return 0, nil
+		},
+		findByID: func(_ context.Context, _ string) (*lecture.Lecture, error) {
+			return &foreign, nil
+		},
+	}
+	svc := newTestService(repo, &mockCore{})
+	handler := mountTestRouter(svc)
+
+	form := url.Values{"visibility": {"private"}}
+	req := addSessionCookie(httptest.NewRequest(http.MethodPost, "/lectures/"+foreign.ID+"/visibility",
+		strings.NewReader(form.Encode())))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("POST visibility для чужой лекции = %d, ожидается 404", rec.Code)
+	}
+}
+
 // TestHandlers_Delete_OK проверяет DELETE /lectures/{id} → 200.
 func TestHandlers_Delete_OK(t *testing.T) {
 	lec := testLecture()

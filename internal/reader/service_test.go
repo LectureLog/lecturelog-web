@@ -49,8 +49,10 @@ func TestServiceLoadAccess(t *testing.T) {
 
 	readyPrivate := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "private", CoreTaskID: "task"}
 	readyPublic := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "public", CoreTaskID: "task"}
+	readyUnlisted := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "unlisted", CoreTaskID: "task"}
 	processingPrivate := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "private", CoreTaskID: "task"}
 	processingPublic := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "public", CoreTaskID: "task"}
+	processingUnlisted := &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "processing", Visibility: "unlisted", CoreTaskID: "task"}
 
 	tests := []struct {
 		name    string
@@ -64,12 +66,18 @@ func TestServiceLoadAccess(t *testing.T) {
 		{name: "public ready owner", lecture: readyPublic, viewer: "owner"},
 		{name: "public ready other user", lecture: readyPublic, viewer: "other"},
 		{name: "public ready anonymous", lecture: readyPublic},
+		{name: "unlisted ready owner", lecture: readyUnlisted, viewer: "owner"},
+		{name: "unlisted ready other user", lecture: readyUnlisted, viewer: "other"},
+		{name: "unlisted ready anonymous", lecture: readyUnlisted},
 		{name: "private processing owner", lecture: processingPrivate, viewer: "owner", wantErr: ErrNotReady},
 		{name: "private processing other user", lecture: processingPrivate, viewer: "other", wantErr: ErrNotFound},
 		{name: "private processing anonymous", lecture: processingPrivate, wantErr: ErrNotFound},
 		{name: "public processing owner", lecture: processingPublic, viewer: "owner", wantErr: ErrNotReady},
 		{name: "public processing other user", lecture: processingPublic, viewer: "other", wantErr: ErrNotFound},
 		{name: "public processing anonymous", lecture: processingPublic, wantErr: ErrNotFound},
+		{name: "unlisted processing owner", lecture: processingUnlisted, viewer: "owner", wantErr: ErrNotReady},
+		{name: "unlisted processing other user", lecture: processingUnlisted, viewer: "other", wantErr: ErrNotFound},
+		{name: "unlisted processing anonymous", lecture: processingUnlisted, wantErr: ErrNotFound},
 		{name: "missing lecture", wantErr: ErrNotFound},
 	}
 
@@ -128,6 +136,29 @@ func TestServiceLoadBuildsView(t *testing.T) {
 		if ttl != 24*time.Hour {
 			t.Errorf("ttl = %s, want 24h", ttl)
 		}
+	}
+}
+
+// TestServiceLoadPropagatesVisibility проверяет, что модель читалки несёт
+// текущую видимость лекции — по ней HTTP-слой выставляет noindex-заголовки.
+func TestServiceLoadPropagatesVisibility(t *testing.T) {
+	service := NewService(
+		fakeLectureRepo{lecture: &LectureMeta{ID: "lecture", OwnerID: "owner", Status: "ready", Visibility: "unlisted", CoreTaskID: "task-1"}},
+		&fakeObjectStore{data: validStructure(t)},
+		&fakePresigner{},
+		fakeRenderer{},
+		time.Hour,
+	)
+
+	view, err := service.Load(context.Background(), "lecture", "")
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if view.Visibility != "unlisted" {
+		t.Errorf("ReaderView.Visibility = %q, want unlisted", view.Visibility)
+	}
+	if view.IsOwner {
+		t.Error("ReaderView.IsOwner = true для анонимного чтения unlisted-лекции")
 	}
 }
 

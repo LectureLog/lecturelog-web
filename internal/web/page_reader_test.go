@@ -53,6 +53,57 @@ func TestReaderPage_Render(t *testing.T) {
 	}
 }
 
+// TestReaderPage_OwnerVisibilityBadge проверяет, что владелец видит в карточке
+// источника бейдж текущей видимости лекции, а посторонний читатель — нет.
+func TestReaderPage_OwnerVisibilityBadge(t *testing.T) {
+	tests := []struct {
+		name       string
+		visibility string
+		isOwner    bool
+		wantLabel  string
+	}{
+		{name: "личная", visibility: "private", isOwner: true, wantLabel: "Личная"},
+		{name: "по ссылке", visibility: "unlisted", isOwner: true, wantLabel: "По ссылке"},
+		{name: "публичная", visibility: "public", isOwner: true, wantLabel: "Публичная"},
+		{name: "не владелец", visibility: "unlisted", isOwner: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			vm := web.ReaderVM{
+				LectureID:   "lecture-42",
+				Title:       "Лекция",
+				SourceTitle: "Источник",
+				SourceKind:  "audio",
+				IsOwner:     tt.isOwner,
+				Visibility:  tt.visibility,
+			}
+
+			var b bytes.Buffer
+			if err := web.ReaderPage(web.LayoutData{Title: vm.Title}, vm).Render(context.Background(), &b); err != nil {
+				t.Fatalf("ReaderPage.Render: %v", err)
+			}
+			html := b.String()
+
+			if !tt.isOwner {
+				if strings.Contains(html, "ll-reader-visibility") || strings.Contains(html, "Владелец") {
+					t.Error("посторонний читатель не должен видеть бейдж владельца/видимости")
+				}
+				return
+			}
+			if !strings.Contains(html, "ll-reader-visibility--"+tt.visibility) {
+				t.Errorf("ожидается класс ll-reader-visibility--%s", tt.visibility)
+			}
+			if !strings.Contains(html, tt.wantLabel) {
+				t.Errorf("ожидается метка видимости %q", tt.wantLabel)
+			}
+			if !strings.Contains(html, "Владелец") {
+				t.Error("бейдж «Владелец» должен сохраняться")
+			}
+		})
+	}
+}
+
 // TestReaderPage_RenderBlocks проверяет инлайн-кадры между HTML-блоками,
 // которые reader-сервис построил из маркеров <!-- slide:N -->.
 func TestReaderPage_RenderBlocks(t *testing.T) {
