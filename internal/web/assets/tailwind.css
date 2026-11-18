@@ -571,12 +571,6 @@
     cursor: default;
   }
 
-  .ll-toggle--public {
-    background: var(--accent-soft);
-    border-color: var(--accent-soft);
-    color: var(--accent);
-  }
-
   /* Трёхпозиционный переключатель видимости: Личная | По ссылке | Витрина.
      Кнопки сегментированы в общую пилюлю; активная помечена aria-pressed. */
   .ll-toggle-group {

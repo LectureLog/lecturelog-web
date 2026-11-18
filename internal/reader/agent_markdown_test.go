@@ -667,3 +667,33 @@ func TestReaderHTMLAlternateMarkdownLink(t *testing.T) {
 		}
 	}
 }
+
+// TestAgentMarkdownEscapesBracketsAndNewlines проверяет экранирование скобок в
+// названиях подтем для ссылок на слайды и нормализацию переводов строк.
+func TestAgentMarkdownEscapesBracketsAndNewlines(t *testing.T) {
+	const structure = `{
+		"source":{"title":"Пост\nсо второй строкой","kind":"video","duration":"00:15"},
+		"sections":[{"title":"Раздел\n1","subtopics":[{
+			"title":"Полуинтервалы [l, r)",
+			"slide_keys":["results/task/s1.png"],
+			"slide_nums":[1],
+			"content_md":"Текст\n\n<!-- slide:1 -->"
+		}]}]
+	}`
+	lecture := agentLecture()
+	lecture.Title = "Алгоритмы\nбаза"
+	handler, _ := newAgentHandler(t, lecture, "", structure, WithBaseOrigin("https://lecture.example"))
+	body := agentGet(handler, "/read/lecture.md", "", nil).Body.String()
+
+	for _, want := range []string{
+		"# Алгоритмы база\n",
+		"- Источник: Пост со второй строкой\n",
+		"- 01. Раздел 1\n",
+		"  - 1.1 Полуинтервалы [l, r)\n",
+		`![Слайд 1: Полуинтервалы \[l, r)](https://lecture.example/read/lecture/slides/1)`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("в Агентском представлении отсутствует %q:\n%s", want, body)
+		}
+	}
+}

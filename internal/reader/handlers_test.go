@@ -202,6 +202,12 @@ func TestHandlersReadUnlistedProcessingHidden(t *testing.T) {
 	if owner.Code != http.StatusAccepted {
 		t.Fatalf("GET unlisted processing владельцем = %d, want 202", owner.Code)
 	}
+	if got := owner.Header().Get("X-Robots-Tag"); got != "noindex, nofollow" {
+		t.Errorf("X-Robots-Tag (202 unlisted) = %q, want noindex, nofollow", got)
+	}
+	if got := owner.Header().Get("Cache-Control"); got != "private, no-store" {
+		t.Errorf("Cache-Control (202 unlisted) = %q, want private, no-store", got)
+	}
 	assertSoftError(t, owner.Body.String())
 }
 

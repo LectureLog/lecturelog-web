@@ -151,6 +151,25 @@ func TestWantsMarkdown(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("несколько строк заголовка Accept", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/hub", nil)
+		req.Header.Add("Accept", "*/*")
+		req.Header.Add("Accept", "text/markdown")
+		if !web.WantsMarkdown(req) {
+			t.Error("WantsMarkdown должен учитывать вторую строку заголовка Accept")
+		}
+	})
+}
+
+// TestSetVaryAcceptUserAgent проверяет сохранение уже выставленного Vary (например, Cookie).
+func TestSetVaryAcceptUserAgent(t *testing.T) {
+	rec := httptest.NewRecorder()
+	rec.Header().Set("Vary", "Cookie")
+	web.SetVaryAcceptUserAgent(rec)
+	if got := rec.Header().Get("Vary"); got != "Accept, User-Agent, Cookie" {
+		t.Errorf("Vary = %q, ожидается \"Accept, User-Agent, Cookie\"", got)
+	}
 }
 
 // TestRobotsTxt проверяет машиночитаемые правила обхода для ИИ-краулеров.

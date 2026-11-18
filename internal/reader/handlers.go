@@ -75,12 +75,11 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 
 	viewerID := viewerID(r.Context())
 	view, err := h.svc.Load(r.Context(), lectureID, viewerID)
+	setNonPublicHeaders(w, view.Visibility)
 	if err != nil {
 		h.writeLoadError(w, err)
 		return
 	}
-
-	setNonPublicHeaders(w, view.Visibility)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := web.NewLayoutData(r.Context(), view.Title)
@@ -146,17 +145,9 @@ func setNonPublicHeaders(w http.ResponseWriter, visibility string) {
 	}
 }
 
-// setVaryAcceptUserAgent добавляет Accept и User-Agent в заголовок Vary,
-// сохраняя существующие значения (например, Cookie от глобального middleware).
+// setVaryAcceptUserAgent делегирует выставление Vary: Accept, User-Agent в пакет web.
 func setVaryAcceptUserAgent(w http.ResponseWriter) {
-	existing := strings.Join(w.Header().Values("Vary"), ", ")
-	if existing == "" {
-		w.Header().Set("Vary", "Accept, User-Agent")
-		return
-	}
-	if !strings.Contains(existing, "Accept, User-Agent") {
-		w.Header().Set("Vary", "Accept, User-Agent, "+existing)
-	}
+	web.SetVaryAcceptUserAgent(w)
 }
 
 func (h *Handlers) handleExport(w http.ResponseWriter, r *http.Request) {

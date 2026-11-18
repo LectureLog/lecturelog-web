@@ -119,7 +119,7 @@ func WantsMarkdown(r *http.Request) bool {
 		return false
 	}
 
-	mdPref, htmlPref := acceptPreferences(r.Header.Get("Accept"))
+	mdPref, htmlPref := acceptPreferences(strings.Join(r.Header.Values("Accept"), ", "))
 	if mdPref.present {
 		if mdPref.weight == 0 {
 			return false
@@ -136,6 +136,37 @@ func WantsMarkdown(r *http.Request) bool {
 		}
 	}
 	return false
+}
+
+// SetVaryAcceptUserAgent добавляет Accept и User-Agent в заголовок Vary,
+// сохраняя существующие значения (например, Cookie от глобального CSRF-middleware).
+func SetVaryAcceptUserAgent(w http.ResponseWriter) {
+	existing := strings.Join(w.Header().Values("Vary"), ", ")
+	if existing == "" {
+		w.Header().Set("Vary", "Accept, User-Agent")
+		return
+	}
+	if !strings.Contains(existing, "Accept, User-Agent") {
+		w.Header().Set("Vary", "Accept, User-Agent, "+existing)
+	}
+}
+
+// EscapeMarkdownLinkText нормализует переводы строк и экранирует скобки
+// в тексте Markdown-ссылки или подписи изображения ![...](...).
+func EscapeMarkdownLinkText(s string) string {
+	s = SanitizeInlineText(s)
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "[", `\[`)
+	s = strings.ReplaceAll(s, "]", `\]`)
+	return s
+}
+
+// SanitizeInlineText убирает переводы строк из однострочных заголовков и полей списка.
+func SanitizeInlineText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return strings.TrimSpace(s)
 }
 
 // acceptPreferences возвращает максимальные веса markdown- и html-типов из Accept.

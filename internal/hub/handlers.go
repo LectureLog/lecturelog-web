@@ -22,8 +22,9 @@ func (s *Service) Mount(r chi.Router) {
 
 // handleHub рендерит публичную витрину лекций: HTML для людей и Markdown для агентов.
 func (s *Service) handleHub(w http.ResponseWriter, r *http.Request) {
-	// Ответ зависит от Accept и User-Agent — обязательно сообщаем об этом кешам.
-	w.Header().Set("Vary", "Accept, User-Agent")
+	// Ответ зависит от Accept и User-Agent — сообщаем об этом кешам,
+	// сохраняя уже выставленные Vary (например, Cookie от CSRF-middleware).
+	web.SetVaryAcceptUserAgent(w)
 	if web.WantsMarkdown(r) {
 		s.handleHubMarkdown(w, r)
 		return
@@ -95,31 +96,14 @@ func writeLectureCatalog(b *strings.Builder, lectures []PublicLecture, origin st
 	}
 	for _, lecture := range lectures {
 		fmt.Fprintf(b, "- [%s](%s/read/%s.md) — %s, автор: %s, опубликовано: %s\n",
-			escapeMarkdownLinkText(lecture.Title),
+			web.EscapeMarkdownLinkText(lecture.Title),
 			origin,
 			lecture.ID,
 			sourceLabel(lecture.SourceKind),
-			sanitizeInlineText(lecture.AuthorName),
+			web.SanitizeInlineText(lecture.AuthorName),
 			lecture.PublishedAt.UTC().Format("2006-01-02"),
 		)
 	}
-}
-
-// escapeMarkdownLinkText нормализует переводы строк и экранирует скобки в тексте Markdown-ссылки.
-func escapeMarkdownLinkText(s string) string {
-	s = sanitizeInlineText(s)
-	s = strings.ReplaceAll(s, `\`, `\\`)
-	s = strings.ReplaceAll(s, "[", `\[`)
-	s = strings.ReplaceAll(s, "]", `\]`)
-	return s
-}
-
-// sanitizeInlineText убирает переводы строк из однострочных полей списка.
-func sanitizeInlineText(s string) string {
-	s = strings.ReplaceAll(s, "\r\n", " ")
-	s = strings.ReplaceAll(s, "\n", " ")
-	s = strings.ReplaceAll(s, "\r", " ")
-	return strings.TrimSpace(s)
 }
 
 // hubToVM конвертирует доменную лекцию в данные карточки витрины.

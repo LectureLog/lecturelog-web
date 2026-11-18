@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/LectureLog/lecturelog-web/internal/web"
 )
 
 // MarkdownView — Агентское представление Конспекта и видимость Лекции.
@@ -67,23 +69,23 @@ func buildAgentMarkdown(lecture *LectureMeta, structure Structure, origin string
 		sourceKind = structure.Source.Kind
 	}
 
-	fmt.Fprintf(&b, "# %s\n\n", lecture.Title)
-	fmt.Fprintf(&b, "- Источник: %s\n", sourceTitle)
+	fmt.Fprintf(&b, "# %s\n\n", web.SanitizeInlineText(lecture.Title))
+	fmt.Fprintf(&b, "- Источник: %s\n", web.SanitizeInlineText(sourceTitle))
 	fmt.Fprintf(&b, "- Тип источника: %s\n", agentSourceLabel(sourceKind))
 	fmt.Fprintf(&b, "- Длительность: %s\n", formatClock(int(structure.Source.Duration)))
 	fmt.Fprintf(&b, "- Канонический URL: %s/read/%s\n\n", origin, lecture.ID)
 
 	b.WriteString("## Содержание\n\n")
 	for sectionIndex, section := range structure.Sections {
-		fmt.Fprintf(&b, "- %02d. %s\n", sectionIndex+1, section.Title)
+		fmt.Fprintf(&b, "- %02d. %s\n", sectionIndex+1, web.SanitizeInlineText(section.Title))
 		for subtopicIndex, subtopic := range section.Subtopics {
-			fmt.Fprintf(&b, "  - %d.%d %s\n", sectionIndex+1, subtopicIndex+1, subtopic.Title)
+			fmt.Fprintf(&b, "  - %d.%d %s\n", sectionIndex+1, subtopicIndex+1, web.SanitizeInlineText(subtopic.Title))
 		}
 	}
 	b.WriteString("\n")
 
 	for sectionIndex, section := range structure.Sections {
-		fmt.Fprintf(&b, "## %02d. %s\n\n", sectionIndex+1, section.Title)
+		fmt.Fprintf(&b, "## %02d. %s\n\n", sectionIndex+1, web.SanitizeInlineText(section.Title))
 		for subtopicIndex, subtopic := range section.Subtopics {
 			writeAgentSubtopic(&b, origin, lecture.ID, subtopic, slideMap, sectionIndex, subtopicIndex, longLecture)
 		}
@@ -94,7 +96,7 @@ func buildAgentMarkdown(lecture *LectureMeta, structure Structure, origin string
 // writeAgentSubtopic пишет Подтему: заголовок, таймкод, текст с инлайн-Слайдами
 // по маркерам <!-- slide:N --> и галерею оставшихся Слайдов в конце.
 func writeAgentSubtopic(b *strings.Builder, origin, lectureID string, subtopic Subtopic, slideMap SlideMap, sectionIndex, subtopicIndex int, longLecture bool) {
-	fmt.Fprintf(b, "### %d.%d %s\n\n", sectionIndex+1, subtopicIndex+1, subtopic.Title)
+	fmt.Fprintf(b, "### %d.%d %s\n\n", sectionIndex+1, subtopicIndex+1, web.SanitizeInlineText(subtopic.Title))
 	if subtopic.Media != nil {
 		// Для длинных записей весь Конспект держит часы в таймкодах, чтобы
 		// Подтемы не смешивали MM:SS и HH:MM:SS в одном представлении.
@@ -136,7 +138,7 @@ func writeAgentSubtopic(b *strings.Builder, origin, lectureID string, subtopic S
 
 // writeAgentSlide пишет Markdown-картинку Слайда с абсолютной ссылкой.
 func writeAgentSlide(b *strings.Builder, origin, lectureID string, num int, subtopicTitle string) {
-	fmt.Fprintf(b, "![Слайд %d: %s](%s/read/%s/slides/%d)\n\n", num, subtopicTitle, origin, lectureID, num)
+	fmt.Fprintf(b, "![Слайд %d: %s](%s/read/%s/slides/%d)\n\n", num, web.EscapeMarkdownLinkText(subtopicTitle), origin, lectureID, num)
 }
 
 // writeAgentText пишет текстовый фрагмент Подтемы: обычный Markdown остаётся

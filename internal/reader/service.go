@@ -12,12 +12,15 @@ import (
 func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderView, error) {
 	lecture, isOwner, err := s.accessLecture(ctx, lectureID, viewerID)
 	if err != nil {
+		if lecture != nil {
+			return ReaderView{Visibility: lecture.Visibility}, err
+		}
 		return ReaderView{}, err
 	}
 
 	structure, err := s.loadStructure(ctx, lecture.CoreTaskID)
 	if err != nil {
-		return ReaderView{}, err
+		return ReaderView{Visibility: lecture.Visibility}, err
 	}
 
 	// Ядро может не знать названия источника (title: null) — показываем
@@ -86,9 +89,9 @@ func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string)
 		}
 		return nil, false, ErrNotFound
 	}
-	// Личная лекция скрыта от всех, кроме владельца; unlisted и public
-	// открыты по прямой ссылке одинаково.
-	if lecture.Visibility == "private" && !isOwner {
+	// Личная лекция (и любое неизвестное состояние видимости) скрыта от всех,
+	// кроме владельца; только unlisted и public открыты по прямой ссылке.
+	if lecture.Visibility != "public" && lecture.Visibility != "unlisted" && !isOwner {
 		return nil, false, ErrNotFound
 	}
 	return lecture, isOwner, nil

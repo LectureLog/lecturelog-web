@@ -395,4 +395,13 @@ func TestHubCatalog_ExcludesPrivateAndUnlistedAndEscapesTitles(t *testing.T) {
 			}
 		}
 	}
+
+	// Проверяем, что /hub не затирает Vary: Cookie, выставленный внешним CSRF-middleware.
+	req := httptest.NewRequest(http.MethodGet, "/hub", nil)
+	rec := httptest.NewRecorder()
+	rec.Header().Set("Vary", "Cookie")
+	mountHubTestRouter(svc).ServeHTTP(rec, req)
+	if got := rec.Header().Get("Vary"); got != "Accept, User-Agent, Cookie" {
+		t.Errorf("Vary с предварительным Cookie = %q, ожидается \"Accept, User-Agent, Cookie\"", got)
+	}
 }
