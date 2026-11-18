@@ -49,41 +49,38 @@ func (s *Service) handleHub(w http.ResponseWriter, r *http.Request) {
 
 // handleHubMarkdown отдаёт Markdown-каталог Витрины (агентское представление).
 func (s *Service) handleHubMarkdown(w http.ResponseWriter, r *http.Request) {
-	lectures, err := s.List(r.Context())
-	if err != nil {
-		log.Printf("hub: handleHubMarkdown: %v", err)
-		http.Error(w, "внутренняя ошибка", http.StatusInternalServerError)
-		return
-	}
-
-	var b strings.Builder
-	b.WriteString("# Витрина LectureLog\n\n")
-	writeLectureCatalog(&b, lectures, web.ResolveOrigin(s.baseOrigin, r))
-
-	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
-	_, _ = io.WriteString(w, b.String())
+	s.serveMarkdown(w, r, "handleHubMarkdown", func(b *strings.Builder, lectures []PublicLecture, origin string) {
+		b.WriteString("# Витрина LectureLog\n\n")
+		writeLectureCatalog(b, lectures, origin)
+	})
 }
 
 // handleLLMsTxt отдаёт индекс платформы для внешних ИИ-агентов (llms.txt).
 func (s *Service) handleLLMsTxt(w http.ResponseWriter, r *http.Request) {
+	s.serveMarkdown(w, r, "handleLLMsTxt", func(b *strings.Builder, lectures []PublicLecture, origin string) {
+		b.WriteString("# LectureLog\n\n")
+		b.WriteString("> Веб-платформа для чтения структурированных конспектов лекций с тайм-кодами и слайдами.\n\n")
+		b.WriteString("## Как читать лекции агентом\n\n")
+		b.WriteString("Конспект публичной лекции или лекции по ссылке доступен в Markdown по адресу " + origin + "/read/{id}.md\n")
+		b.WriteString("или по адресу " + origin + "/read/{id} с заголовком `Accept: text/markdown`.\n")
+		b.WriteString("Изображения слайдов отдаются по " + origin + "/read/{id}/slides/{n}, где `{n}` — номер слайда начиная с 1.\n")
+		b.WriteString("Каталог Витрины в Markdown: " + origin + "/hub.md.\n\n")
+		b.WriteString("## Публичные лекции\n\n")
+		writeLectureCatalog(b, lectures, origin)
+	})
+}
+
+// serveMarkdown загружает публичные лекции и отдаёт отформатированный Markdown-ответ.
+func (s *Service) serveMarkdown(w http.ResponseWriter, r *http.Request, op string, build func(b *strings.Builder, lectures []PublicLecture, origin string)) {
 	lectures, err := s.List(r.Context())
 	if err != nil {
-		log.Printf("hub: handleLLMsTxt: %v", err)
+		log.Printf("hub: %s: %v", op, err)
 		http.Error(w, "внутренняя ошибка", http.StatusInternalServerError)
 		return
 	}
 
-	origin := web.ResolveOrigin(s.baseOrigin, r)
 	var b strings.Builder
-	b.WriteString("# LectureLog\n\n")
-	b.WriteString("> Веб-платформа для чтения структурированных конспектов лекций с тайм-кодами и слайдами.\n\n")
-	b.WriteString("## Как читать лекции агентом\n\n")
-	b.WriteString("Конспект открытой лекции доступен в Markdown по адресу " + origin + "/read/{id}.md\n")
-	b.WriteString("или по адресу " + origin + "/read/{id} с заголовком `Accept: text/markdown`.\n")
-	b.WriteString("Изображения слайдов отдаются по " + origin + "/read/{id}/slides/{n}, где `{n}` — номер слайда начиная с 1.\n")
-	b.WriteString("Каталог Витрины в Markdown: " + origin + "/hub.md.\n\n")
-	b.WriteString("## Публичные лекции\n\n")
-	writeLectureCatalog(&b, lectures, origin)
+	build(&b, lectures, web.ResolveOrigin(s.baseOrigin, r))
 
 	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
 	_, _ = io.WriteString(w, b.String())
@@ -98,14 +95,31 @@ func writeLectureCatalog(b *strings.Builder, lectures []PublicLecture, origin st
 	}
 	for _, lecture := range lectures {
 		fmt.Fprintf(b, "- [%s](%s/read/%s.md) — %s, автор: %s, опубликовано: %s\n",
-			lecture.Title,
+			escapeMarkdownLinkText(lecture.Title),
 			origin,
 			lecture.ID,
 			sourceLabel(lecture.SourceKind),
-			lecture.AuthorName,
+			sanitizeInlineText(lecture.AuthorName),
 			lecture.PublishedAt.UTC().Format("2006-01-02"),
 		)
 	}
+}
+
+// escapeMarkdownLinkText нормализует переводы строк и экранирует скобки в тексте Markdown-ссылки.
+func escapeMarkdownLinkText(s string) string {
+	s = sanitizeInlineText(s)
+	s = strings.ReplaceAll(s, `\`, `\\`)
+	s = strings.ReplaceAll(s, "[", `\[`)
+	s = strings.ReplaceAll(s, "]", `\]`)
+	return s
+}
+
+// sanitizeInlineText убирает переводы строк из однострочных полей списка.
+func sanitizeInlineText(s string) string {
+	s = strings.ReplaceAll(s, "\r\n", " ")
+	s = strings.ReplaceAll(s, "\n", " ")
+	s = strings.ReplaceAll(s, "\r", " ")
+	return strings.TrimSpace(s)
 }
 
 // hubToVM конвертирует доменную лекцию в данные карточки витрины.

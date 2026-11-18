@@ -305,3 +305,94 @@ func TestHandleHub_ContentNegotiation(t *testing.T) {
 		})
 	}
 }
+
+// visibilityRecord моделирует запись лекции с уровнем видимости для проверки фильтрации Витрины.
+type visibilityRecord struct {
+	PublicLecture
+	Visibility string
+}
+
+// TestHubCatalog_ExcludesPrivateAndUnlistedAndEscapesTitles проверяет, что ни /llms.txt,
+// ни /hub.md, ни /hub (HTML и Markdown) не включают private и unlisted лекции,
+// что /hub.md и /llms.txt всегда отдают Markdown даже с браузерными заголовками,
+// и что скобки в заголовке не ломают Markdown-ссылку.
+func TestHubCatalog_ExcludesPrivateAndUnlistedAndEscapesTitles(t *testing.T) {
+	records := []visibilityRecord{
+		{
+			Visibility: "public",
+			PublicLecture: PublicLecture{
+				ID:          "pub-1",
+				Title:       "Лекция [Часть 1]",
+				SourceKind:  "video",
+				AuthorName:  "Иван",
+				PublishedAt: time.Date(2026, 4, 1, 12, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			Visibility: "unlisted",
+			PublicLecture: PublicLecture{
+				ID:          "unlisted-secret",
+				Title:       "Скрытая по ссылке",
+				SourceKind:  "audio",
+				AuthorName:  "Пётр",
+				PublishedAt: time.Date(2026, 4, 2, 12, 0, 0, 0, time.UTC),
+			},
+		},
+		{
+			Visibility: "private",
+			PublicLecture: PublicLecture{
+				ID:          "private-secret",
+				Title:       "Личная запись",
+				SourceKind:  "audio",
+				AuthorName:  "Мария",
+				PublishedAt: time.Date(2026, 4, 3, 12, 0, 0, 0, time.UTC),
+			},
+		},
+	}
+
+	repo := &mockRepository{
+		listPublicFn: func(_ context.Context, _ int) ([]PublicLecture, error) {
+			out := make([]PublicLecture, 0)
+			for _, rec := range records {
+				if rec.Visibility == "public" {
+					out = append(out, rec.PublicLecture)
+				}
+			}
+			return out, nil
+		},
+	}
+	svc := NewService(repo, 0, WithBaseOrigin(testBaseOrigin))
+	browserHeaders := map[string]string{
+		"Accept":     "text/html,application/xhtml+xml,*/*;q=0.8",
+		"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/126.0",
+	}
+
+	for _, path := range []string{"/llms.txt", "/hub.md"} {
+		rec := serveHub(svc, path, browserHeaders)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("GET %s = %d, ожидается 200", path, rec.Code)
+		}
+		if got := rec.Header().Get("Content-Type"); got != "text/markdown; charset=utf-8" {
+			t.Errorf("%s Content-Type = %q, ожидается text/markdown; charset=utf-8", path, got)
+		}
+		body := rec.Body.String()
+		if !strings.Contains(body, `- [Лекция \[Часть 1\]](https://lecturelog.example/read/pub-1.md)`) {
+			t.Errorf("%s должен содержать экранированную ссылку публичной лекции:\n%s", path, body)
+		}
+		for _, forbidden := range []string{"unlisted-secret", "Скрытая по ссылке", "private-secret", "Личная запись"} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s не должен содержать не-публичную лекцию %q:\n%s", path, forbidden, body)
+			}
+		}
+	}
+
+	for _, headers := range []map[string]string{browserHeaders, {"Accept": "text/markdown"}} {
+		rec := serveHub(svc, "/hub", headers)
+		body := rec.Body.String()
+		for _, forbidden := range []string{"unlisted-secret", "Скрытая по ссылке", "private-secret", "Личная запись"} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("/hub не должен содержать не-публичную лекцию %q:\n%s", forbidden, body)
+			}
+		}
+	}
+}

@@ -99,25 +99,35 @@ func forwardedProto(r *http.Request) string {
 	return ""
 }
 
+// mediaPreference описывает присутствие и максимальный вес q семейства медиатипов в Accept.
+type mediaPreference struct {
+	weight  float64
+	present bool
+}
+
 // WantsMarkdown решает, отдавать ли Агентское представление вместо HTML.
 //
 // Правило выбора:
 //  1. `Accept` явно предпочитает `text/markdown` / `text/x-markdown` перед
-//     `text/html` (с учётом весов `q=`); при `qHTML > qMD` ответ всегда HTML.
+//     `text/html` (с учётом весов `q=`); при `qMD == 0` (явный отказ) или
+//     `qHTML >= qMD` при явном присутствии обоих семейств приоритет у HTML.
 //  2. Известный агентский или CLI `User-Agent` получает Markdown независимо
-//     от `Accept` — облачные боты часто шлют `Accept: text/html` или `*/*`.
+//     от дефолтного `Accept` (`text/html` или `*/*`) — облачные боты часто шлют `Accept: text/html`.
 //  3. Во всех остальных случаях (обычный браузер, пустые заголовки) — HTML.
 func WantsMarkdown(r *http.Request) bool {
 	if r == nil {
 		return false
 	}
 
-	markdownWeight, markdownSet, htmlWeight, htmlSet := acceptWeights(r.Header.Get("Accept"))
-	if markdownSet && markdownWeight > 0 {
-		if htmlSet && htmlWeight > markdownWeight {
+	mdPref, htmlPref := acceptPreferences(r.Header.Get("Accept"))
+	if mdPref.present {
+		if mdPref.weight == 0 {
 			return false
 		}
-		if markdownWeight >= htmlWeight {
+		if htmlPref.present && htmlPref.weight >= mdPref.weight {
+			return false
+		}
+		if mdPref.weight > htmlPref.weight {
 			return true
 		}
 	}
@@ -131,25 +141,24 @@ func WantsMarkdown(r *http.Request) bool {
 	return false
 }
 
-// acceptWeights возвращает максимальные веса markdown- и html-типов из Accept.
-// Флаги set показывают, прислал ли клиент соответствующее семейство типов.
-func acceptWeights(accept string) (markdownWeight float64, markdownSet bool, htmlWeight float64, htmlSet bool) {
+// acceptPreferences возвращает максимальные веса markdown- и html-типов из Accept.
+func acceptPreferences(accept string) (mdPref mediaPreference, htmlPref mediaPreference) {
 	for _, part := range strings.Split(accept, ",") {
 		mediaType, quality := parseAcceptPart(part)
 		switch mediaType {
 		case "text/markdown", "text/x-markdown":
-			markdownSet = true
-			if quality > markdownWeight {
-				markdownWeight = quality
+			mdPref.present = true
+			if quality > mdPref.weight {
+				mdPref.weight = quality
 			}
 		case "text/html", "application/xhtml+xml":
-			htmlSet = true
-			if quality > htmlWeight {
-				htmlWeight = quality
+			htmlPref.present = true
+			if quality > htmlPref.weight {
+				htmlPref.weight = quality
 			}
 		}
 	}
-	return markdownWeight, markdownSet, htmlWeight, htmlSet
+	return mdPref, htmlPref
 }
 
 // parseAcceptPart разбирает один элемент Accept: медиатип и вес q (по умолчанию 1.0).
