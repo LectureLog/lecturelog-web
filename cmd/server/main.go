@@ -191,7 +191,11 @@ func main() {
 		&lectureRepo{lectures: lectureDB},
 		&coreTasksAdapter{core: core},
 	)
-	hubSvc := hub.NewService(&hubRepo{lectures: lectureDB}, 0)
+	hubSvc := hub.NewService(
+		&hubRepo{lectures: lectureDB},
+		0,
+		hub.WithBaseOrigin(web.OriginFromCallbackURL(cfg.OAuth.CallbackURL)),
+	)
 	s3Client, err := s3.New(s3.Config{
 		Endpoint:  cfg.CoreMinIO.Endpoint,
 		AccessKey: cfg.CoreMinIO.AccessKey,
