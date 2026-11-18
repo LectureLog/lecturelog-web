@@ -15,14 +15,7 @@ func (s *Service) Load(ctx context.Context, lectureID, viewerID string) (ReaderV
 		return ReaderView{}, err
 	}
 
-	// Ядро кладёт выход задачи под results/<taskID>/output/ (см. контракт пути
-	// выхода core). Сегмент output/ обязателен, иначе GetObject вернёт NoSuchKey.
-	structureKey := "results/" + lecture.CoreTaskID + "/output/structure.json"
-	b, err := s.store.GetObject(ctx, structureKey)
-	if err != nil {
-		return ReaderView{}, fmt.Errorf("%w: прочитать structure.json: %v", ErrCoreUnavailable, err)
-	}
-	structure, err := ParseStructure(b)
+	structure, err := s.loadStructure(ctx, lecture.CoreTaskID)
 	if err != nil {
 		return ReaderView{}, err
 	}
@@ -89,7 +82,7 @@ func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string)
 	isOwner := viewerID != "" && viewerID == lecture.OwnerID
 	if lecture.Status != "ready" {
 		if isOwner {
-			return nil, false, ErrNotReady
+			return lecture, true, ErrNotReady
 		}
 		return nil, false, ErrNotFound
 	}
@@ -99,6 +92,18 @@ func (s *Service) accessLecture(ctx context.Context, lectureID, viewerID string)
 		return nil, false, ErrNotFound
 	}
 	return lecture, isOwner, nil
+}
+
+// loadStructure читает и разбирает structure.json результата задачи ядра.
+func (s *Service) loadStructure(ctx context.Context, coreTaskID string) (Structure, error) {
+	// Ядро кладёт выход задачи под results/<taskID>/output/ (см. контракт пути
+	// выхода core). Сегмент output/ обязателен, иначе GetObject вернёт NoSuchKey.
+	structureKey := "results/" + coreTaskID + "/output/structure.json"
+	b, err := s.store.GetObject(ctx, structureKey)
+	if err != nil {
+		return Structure{}, fmt.Errorf("%w: прочитать structure.json: %v", ErrCoreUnavailable, err)
+	}
+	return ParseStructure(b)
 }
 
 func (s *Service) buildSubtopic(ctx context.Context, sectionNumber, subtopicNumber int, subtopic Subtopic) (ViewSubtopic, error) {

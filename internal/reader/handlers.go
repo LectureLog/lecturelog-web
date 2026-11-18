@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/LectureLog/lecturelog-web/internal/web"
@@ -31,6 +32,7 @@ func NewHandlers(svc *Service, export ExportURLProvider) *Handlers {
 // Mount регистрирует публичные маршруты читального зала.
 func (h *Handlers) Mount(r chi.Router) {
 	r.Get("/read/{id}", h.handleRead)
+	r.Get("/read/{id}/slides/{n}", h.handleSlide)
 	r.Get("/read/{id}/export", h.handleExport)
 }
 
@@ -58,6 +60,30 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleSlide раздаёт байты Слайда напрямую с домена платформы.
+func (h *Handlers) handleSlide(w http.ResponseWriter, r *http.Request) {
+	num, parseErr := strconv.Atoi(chi.URLParam(r, "n"))
+	if parseErr != nil || num <= 0 {
+		num = 0
+	}
+
+	slide, err := h.svc.LoadSlide(r.Context(), chi.URLParam(r, "id"), viewerID(r.Context()), num)
+	if slide.Visibility != "" && slide.Visibility != "public" {
+		w.Header().Set("Cache-Control", "private, no-store")
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	}
+	if err != nil {
+		h.writeSlideError(w, err)
+		return
+	}
+
+	w.Header().Set("Content-Type", slide.ContentType)
+	if slide.Visibility == "public" {
+		w.Header().Set("Cache-Control", "public, max-age=3600")
+	}
+	_, _ = w.Write(slide.Bytes)
+}
+
 func (h *Handlers) handleExport(w http.ResponseWriter, r *http.Request) {
 	taskID, err := h.svc.AccessTaskID(r.Context(), chi.URLParam(r, "id"), viewerID(r.Context()))
 	if err != nil {
@@ -80,26 +106,46 @@ func (h *Handlers) handleExport(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) writeLoadError(w http.ResponseWriter, err error) {
-	switch {
-	case errors.Is(err, ErrNotFound):
-		writeMessage(w, http.StatusNotFound, "Лекция не найдена")
-	case errors.Is(err, ErrNotReady):
-		writeMessage(w, http.StatusAccepted, "Лекция ещё обрабатывается")
-	case errors.Is(err, ErrCoreUnavailable):
-		// Логируем причину: молчаливое проглатывание уже раз скрыло
-		// расхождение ключа structure.json с реальным путём выхода core.
-		log.Printf("reader: core unavailable: %v", err)
-		writeMessage(w, http.StatusBadGateway, "Результат обработки временно недоступен, попробуйте позже")
-	default:
-		log.Printf("reader: request: %v", err)
-		writeMessage(w, http.StatusInternalServerError, "Внутренняя ошибка")
-	}
+	status, message := resolveLoadError(err, "Лекция не найдена", "request")
+	writeMessage(w, status, message)
 }
 
 func writeMessage(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	_, _ = io.WriteString(w, "<!doctype html><html lang=\"ru\"><body><p>"+message+"</p></body></html>")
+}
+
+// writeTextMessage отправляет лаконичный текстовый ответ без HTML-обвязки.
+func writeTextMessage(w http.ResponseWriter, status int, message string) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = io.WriteString(w, message+"\n")
+}
+
+// writeSlideError отдаёт текстовую ошибку раздачи Слайда, не раскрывая
+// внутренние пути и ошибки хранилища.
+func (h *Handlers) writeSlideError(w http.ResponseWriter, err error) {
+	status, message := resolveLoadError(err, "Слайд не найден", "slide")
+	writeTextMessage(w, status, message)
+}
+
+// resolveLoadError отображает доменную ошибку чтения в HTTP-статус и безопасное сообщение.
+func resolveLoadError(err error, notFoundMessage, logScope string) (int, string) {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return http.StatusNotFound, notFoundMessage
+	case errors.Is(err, ErrNotReady):
+		return http.StatusAccepted, "Лекция ещё обрабатывается"
+	case errors.Is(err, ErrCoreUnavailable):
+		// Логируем причину: молчаливое проглатывание уже раз скрыло
+		// расхождение ключа structure.json с реальным путём выхода core.
+		log.Printf("reader: %s core unavailable: %v", logScope, err)
+		return http.StatusBadGateway, "Результат обработки временно недоступен, попробуйте позже"
+	default:
+		log.Printf("reader: %s: %v", logScope, err)
+		return http.StatusInternalServerError, "Внутренняя ошибка"
+	}
 }
 
 func viewerID(ctx context.Context) string {
