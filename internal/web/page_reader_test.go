@@ -147,6 +147,49 @@ func TestReaderPage_RenderBlocks(t *testing.T) {
 	}
 }
 
+// TestReaderPage_AgentMarkdownLink проверяет ссылку rel=alternate в <head>
+// и действие MD в шапке Читального зала.
+func TestReaderPage_AgentMarkdownLink(t *testing.T) {
+	vm := web.ReaderVM{LectureID: "lecture-42", Title: "Лекция"}
+
+	var b bytes.Buffer
+	if err := web.ReaderPage(web.LayoutData{Title: vm.Title}, vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("ReaderPage.Render: %v", err)
+	}
+	html := b.String()
+
+	for _, want := range []string{
+		`<link rel="alternate" type="text/markdown" href="/read/lecture-42.md">`,
+		`href="/read/lecture-42.md"`,
+		`aria-label="Открыть конспект в Markdown для ИИ-агента"`,
+		`>MD</a>`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Errorf("в рендере отсутствует %q", want)
+		}
+	}
+}
+
+// TestReaderPage_AlternateMarkdownURLOverride проверяет, что явно заданная
+// альтернативная ссылка не перезаписывается ID лекции.
+func TestReaderPage_AlternateMarkdownURLOverride(t *testing.T) {
+	vm := web.ReaderVM{LectureID: "lecture-42", Title: "Лекция"}
+	data := web.LayoutData{Title: vm.Title, AlternateMarkdownURL: "/custom.md"}
+
+	var b bytes.Buffer
+	if err := web.ReaderPage(data, vm).Render(context.Background(), &b); err != nil {
+		t.Fatalf("ReaderPage.Render: %v", err)
+	}
+	html := b.String()
+
+	if !strings.Contains(html, `<link rel="alternate" type="text/markdown" href="/custom.md">`) {
+		t.Error("в <head> должна оставаться явно заданная ссылка")
+	}
+	if strings.Contains(html, `<link rel="alternate" type="text/markdown" href="/read/lecture-42.md">`) {
+		t.Error("явно заданная ссылка не должна перезаписываться")
+	}
+}
+
 // TestReaderPage_RenderEmptyData проверяет рендер без необязательных данных читалки.
 func TestReaderPage_RenderEmptyData(t *testing.T) {
 	tests := []struct {

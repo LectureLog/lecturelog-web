@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/LectureLog/lecturelog-web/internal/auth"
 	"github.com/LectureLog/lecturelog-web/internal/web"
@@ -22,22 +23,55 @@ type ExportURLProvider interface {
 type Handlers struct {
 	svc    *Service
 	export ExportURLProvider
+	// baseOrigin — внешний origin платформы (scheme://host) для абсолютных
+	// ссылок в Агентском представлении. Пусто — origin выводится из запроса.
+	baseOrigin string
+}
+
+// HandlerOption — функциональная опция HTTP-хендлеров читального зала.
+type HandlerOption func(*Handlers)
+
+// WithBaseOrigin задаёт внешний origin платформы (обычно извлекается из
+// PLATFORM_CALLBACK_URL) для абсолютных ссылок в Агентском представлении.
+func WithBaseOrigin(origin string) HandlerOption {
+	return func(h *Handlers) {
+		h.baseOrigin = origin
+	}
 }
 
 // NewHandlers создаёт HTTP-хендлеры читального зала.
-func NewHandlers(svc *Service, export ExportURLProvider) *Handlers {
-	return &Handlers{svc: svc, export: export}
+func NewHandlers(svc *Service, export ExportURLProvider, opts ...HandlerOption) *Handlers {
+	h := &Handlers{svc: svc, export: export}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 // Mount регистрирует публичные маршруты читального зала.
 func (h *Handlers) Mount(r chi.Router) {
 	r.Get("/read/{id}", h.handleRead)
+	r.Get("/read/{id}.md", h.handleReadMarkdown)
 	r.Get("/read/{id}/slides/{n}", h.handleSlide)
 	r.Get("/read/{id}/export", h.handleExport)
 }
 
 func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 	lectureID := chi.URLParam(r, "id")
+	// Ответ зависит от Accept и User-Agent — обязательно сообщаем об этом кешам.
+	w.Header().Set("Vary", "Accept, User-Agent")
+
+	// chi разбирает `{id}.md` как параметр `{id}` и статический суффикс, но
+	// страховка на случай иного порядка матчинга: `.md` всегда Markdown.
+	if strings.HasSuffix(lectureID, ".md") {
+		h.serveReadMarkdown(w, r, strings.TrimSuffix(lectureID, ".md"))
+		return
+	}
+	if web.WantsMarkdown(r) {
+		h.serveReadMarkdown(w, r, lectureID)
+		return
+	}
+
 	viewerID := viewerID(r.Context())
 	view, err := h.svc.Load(r.Context(), lectureID, viewerID)
 	if err != nil {
@@ -55,9 +89,39 @@ func (h *Handlers) handleRead(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	data := web.NewLayoutData(r.Context(), view.Title)
 	data.NoIndex = view.Visibility != "public"
+	data.AlternateMarkdownURL = "/read/" + view.LectureID + ".md"
 	if err := web.ReaderPage(data, readerToVM(view)).Render(r.Context(), w); err != nil {
 		log.Printf("reader: render: %v", err)
 	}
+}
+
+// handleReadMarkdown детерминированно отдаёт Агентское представление
+// Конспекта независимо от Accept и User-Agent.
+func (h *Handlers) handleReadMarkdown(w http.ResponseWriter, r *http.Request) {
+	h.serveReadMarkdown(w, r, chi.URLParam(r, "id"))
+}
+
+// serveReadMarkdown проверяет доступ и отдаёт текст Агентского представления
+// с заголовками кеширования и индексации по видимости Лекции.
+func (h *Handlers) serveReadMarkdown(w http.ResponseWriter, r *http.Request, lectureID string) {
+	origin := web.ResolveOrigin(h.baseOrigin, r)
+	doc, err := h.svc.LoadMarkdown(r.Context(), lectureID, viewerID(r.Context()), origin)
+
+	if doc.Visibility != "" && doc.Visibility != "public" {
+		w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+		w.Header().Set("Cache-Control", "private, no-store")
+	}
+	if err != nil {
+		status, message := resolveLoadError(err, "Лекция не найдена", "markdown")
+		writeTextMessage(w, status, message)
+		return
+	}
+	if doc.Visibility == "public" {
+		w.Header().Set("Cache-Control", "public, max-age=60")
+	}
+
+	w.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	_, _ = io.WriteString(w, doc.Markdown)
 }
 
 // handleSlide раздаёт байты Слайда напрямую с домена платформы.

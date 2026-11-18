@@ -213,7 +213,7 @@ func main() {
 		reader.NewMarkdownRenderer(),
 		cfg.PresignedTTL,
 	)
-	readerHandlers := reader.NewHandlers(readerSvc, core)
+	readerHandlers := reader.NewHandlers(readerSvc, core, reader.WithBaseOrigin(web.OriginFromCallbackURL(cfg.OAuth.CallbackURL)))
 
 	// CSRF-ключ генерируется на старте (32 случайных байта).
 	// ДОЛГ: для прод-стабильности вынести в env (PLATFORM_CSRF_KEY) — рестарт инвалидирует токены.
